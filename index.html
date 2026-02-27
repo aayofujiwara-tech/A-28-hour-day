@@ -863,6 +863,10 @@ const LANG = {
     allocExplain: '⏱ 1日 = 24時間。あなたの持ち時間です。',
     skipPenalty: 'スキップ: ',
     workFixed: '⚠ 方針により変更不可',
+    serviceLimit: {
+      remaining: '残り {n} / 2 回',
+      exhausted: '今週の利用上限に達しました（週2回まで）',
+    },
     policy: {
       title: 'あなたの方針',
       question: '母の介護、どう向き合いますか？',
@@ -1056,6 +1060,16 @@ const LANG = {
     wanderNight: 'また眠れない。いつまで続くのか',
   },
 
+  // --- Service rejection ---
+  serviceRejected: {
+    dayService: 'デイサービスに電話したが、「今日は定員いっぱいで…すみません」と断られた。',
+    visitCare: '訪問介護の予約が取れなかった。「ヘルパーが足りなくて…」',
+  },
+  serviceRejectedEmotion: {
+    dayService: '頼ろうとしたのに、頼れなかった',
+    visitCare: '助けが来なかった',
+  },
+
   // --- Learning messages ---
   learning: {
     toilet: '排泄介助のタイミングが掴めてきた。\n——試行錯誤は無駄じゃなかった。\n（排泄介助コスト 2pt → 1pt）',
@@ -1132,6 +1146,7 @@ const LANG = {
     policySoloOver: 'あなたは「全部自分でやる」と決めました。\nでも、一人で抱え込むことが、最善とは限りません。',
     policyWorkClear: '仕事と介護。どちらも手放せなかった7日間。\n日本では、介護離職者が年間約10万人。\nあなたは踏みとどまった——でも、その代償は小さくなかった。',
     policyWorkOver: 'フルタイムで働きながらの介護。\n24時間では、どうやっても足りなかった。',
+    serviceRejected: '頼ろうとして、断られた日があった。\n助けを求めることすら、いつもうまくいくとは限らない。\nそれでも——求め続けることに意味がある。',
   },
 
   // --- Report labels ---
@@ -1265,6 +1280,8 @@ function initGameState() {
     skippedMeals: 0,
     totalSleepPt: 0,
     usedService: 0,
+    dayServiceUsedThisWeek: 0,
+    serviceWasRejected: false,
     workedDays: 0,
     skipHousework: 0,
     restDays: 0,
@@ -1643,6 +1660,8 @@ function toggleService(id) {
       svc.frees.forEach(fid => allocState.freedActions.delete(fid));
     }
   } else {
+    // Check day service weekly limit
+    if (id === 'dayService' && G.dayServiceUsedThisWeek >= 2) return;
     // Check money
     if (svc.cost && G.money + svc.cost < 0) return;
     allocState.selected.add(id);
@@ -1770,8 +1789,20 @@ function renderAlloc(isInitial) {
         // Show cost
         const svcCost = Math.abs(a.cost);
         extraInfo = `<div class="action-detail">💰 -${LANG.locale.currencyFormat(svcCost)}</div>`;
+        // Day service weekly limit
+        if (id === 'dayService') {
+          const dsRemaining = 2 - G.dayServiceUsedThisWeek;
+          if (dsRemaining <= 0) {
+            extraInfo += `<div class="action-penalty">${LANG.ui.serviceLimit.exhausted}</div>`;
+            extraInfo += `<div class="action-penalty" style="font-weight:700;color:var(--red);">0 / 2 回</div>`;
+            cardClass += ' disabled';
+            isDisabled = true;
+          } else {
+            extraInfo += `<div class="action-detail">${t(LANG.ui.serviceLimit.remaining, { n: dsRemaining })}</div>`;
+          }
+        }
         // Disable if not enough money
-        if (!isSelected && G.money < svcCost) {
+        if (!isSelected && !isDisabled && G.money < svcCost) {
           cardClass += ' disabled';
           isDisabled = true;
         }
@@ -1958,16 +1989,45 @@ function confirmDay() {
     dayResults.push({ tag: 'info', text: `固定費引き落とし: -${LANG.locale.currencyFormat(G.weeklyFixedCost)}` });
   }
 
-  // --- Service processing ---
+  // --- Service processing (with rejection probability) ---
+  let dayServiceRejected = false;
+  let visitCareRejected = false;
+
   if (sel.has('dayService')) {
-    G.money -= LANG.locale.services.dayService.cost;
-    G.usedService++;
-    dayResults.push({ tag: 'good', text: `${LANG.actions.dayService.name}を利用した。食事・排泄・見守りを任せられた。` });
+    const rejectRate = G.day >= 5 ? 0.25 : 0.15;
+    if (Math.random() < rejectRate) {
+      dayServiceRejected = true;
+      G.serviceWasRejected = true;
+      dayResults.push({ tag: 'bad', text: LANG.serviceRejected.dayService });
+      G.emotionLog.push(LANG.serviceRejectedEmotion.dayService);
+    } else {
+      G.money -= LANG.locale.services.dayService.cost;
+      G.usedService++;
+      G.dayServiceUsedThisWeek++;
+      dayResults.push({ tag: 'good', text: `${LANG.actions.dayService.name}を利用した。食事・排泄・見守りを任せられた。` });
+    }
   }
   if (sel.has('visitCare')) {
-    G.money -= LANG.locale.services.visitCare.cost;
-    G.usedService++;
-    dayResults.push({ tag: 'good', text: `${LANG.actions.visitCare.name}を利用した。排泄介助を任せられた。` });
+    const rejectRate = G.day >= 5 ? 0.20 : 0.10;
+    if (Math.random() < rejectRate) {
+      visitCareRejected = true;
+      G.serviceWasRejected = true;
+      dayResults.push({ tag: 'bad', text: LANG.serviceRejected.visitCare });
+      G.emotionLog.push(LANG.serviceRejectedEmotion.visitCare);
+    } else {
+      G.money -= LANG.locale.services.visitCare.cost;
+      G.usedService++;
+      dayResults.push({ tag: 'good', text: `${LANG.actions.visitCare.name}を利用した。排泄介助を任せられた。` });
+    }
+  }
+
+  // Recalculate freed actions: only non-rejected services provide frees
+  freed.clear();
+  if (sel.has('dayService') && !dayServiceRejected) {
+    (actions.dayService.frees || []).forEach(fid => freed.add(fid));
+  }
+  if (sel.has('visitCare') && !visitCareRejected) {
+    (actions.visitCare.frees || []).forEach(fid => freed.add(fid));
   }
 
   // --- Meal processing ---
@@ -2755,6 +2815,11 @@ function goToEnding() {
   }
   if (G.madeBackupNote) {
     extras.push(LANG.endingExtras.backupNote);
+  }
+
+  // Service rejection experience
+  if (G.serviceWasRejected) {
+    extras.push(LANG.endingExtras.serviceRejected);
   }
 
   // Peer support
