@@ -1113,7 +1113,7 @@ const LANG = {
 
   // --- Support network ---
   support: {
-    peerFound: '友人に打ち明けたら、実は友人の親も最近物忘れが増えているという。\n『お互いさまだね』\n——同じ境遇の人がこんなに近くにいた。\n（以降の友人電話: メンタル+1 → +2）',
+    peerFound: '友人に打ち明けたら、実は友人の親も最近物忘れが増えているという。\n『お互いさまだね』\n——同じ境遇の人がこんなに近くにいた。\n（以降、友人電話の日は突発イベント確率-10%）',
   },
 
   // --- Environment improvement messages ---
@@ -1232,10 +1232,10 @@ const LANG = {
   // --- Tone-varied text (MP-linked) ---
   tone: {
     rest: [
-      '少しだけ、自分の時間が持てた。メンタル+2',
-      '疲れた体を少し休めた。……もっと休みたい。メンタル+2',
-      '……休んでいいのだろうか。罪悪感がある。メンタル+2',
-      '何もする気力がない。ただ座っていた。メンタル+2',
+      '少しだけ、自分の時間が持てた。メンタル+1',
+      '疲れた体を少し休めた。……もっと休みたい。メンタル+1',
+      '……休んでいいのだろうか。罪悪感がある。メンタル+1',
+      '何もする気力がない。ただ座っていた。メンタル+1',
     ],
     myMealSkip: [
       '自分の食事をスキップした。体力が削られた。',
@@ -1483,13 +1483,14 @@ function determineMotherMood() {
   const day = G.day;
   const rand = Math.random() * 100;
 
-  // Uneasy probability
+  // Uneasy probability (escalates with days)
   let uneasyCap = 15 + (day - 1) * 7;
   if (G.medsSkippedYesterday) uneasyCap += 15;
+  if (day >= 3) uneasyCap += 5;
 
-  // Refuse probability
+  // Refuse probability (escalates with days)
   let refuseCap = 0;
-  if (day >= 5) refuseCap = 15;
+  if (day >= 5) refuseCap = 25;
   else if (day >= 3) refuseCap = 8;
 
   // Good (calm) probability
@@ -2067,6 +2068,7 @@ function confirmDay() {
   // --- Meal processing ---
   const mealIds = ['meal_m', 'meal_l', 'meal_e'];
   let mealsToday = 0;
+  let mealsSkippedToday = 0;
   for (const mid of mealIds) {
     const isFreed = freed.has(mid);
     const isDone = sel.has(mid) || isFreed;
@@ -2081,8 +2083,15 @@ function confirmDay() {
     } else {
       G.motherHealth = Math.max(0, G.motherHealth - 1);
       G.skippedMeals++;
-      dayResults.push({ tag: 'bad', text: `${LANG.actions[mid].name}をスキップした。母の健康が悪化。` });
+      mealsSkippedToday++;
+      G.mp = Math.max(0, G.mp - 1);
+      dayResults.push({ tag: 'bad', text: `${LANG.actions[mid].name}をスキップした。母の健康が悪化。食べさせてあげられなかった罪悪感。メンタル-1` });
     }
+  }
+  // All 3 meals skipped: extra MP penalty
+  if (mealsSkippedToday >= 3) {
+    G.mp = Math.max(0, G.mp - 1);
+    dayResults.push({ tag: 'bad', text: '今日、母に何も食べさせていない——。メンタル-1' });
   }
   // Meal streak
   if (mealsToday === 3) {
@@ -2111,8 +2120,9 @@ function confirmDay() {
       }
     } else {
       G.mp = Math.max(0, G.mp - 1);
+      G.motherHealth = Math.max(0, G.motherHealth - 1);
       G.toiletStreak = 0;
-      dayResults.push({ tag: 'bad', text: `${LANG.actions.toilet.name}をスキップ。メンタルが削られた。` });
+      dayResults.push({ tag: 'bad', text: `${LANG.actions.toilet.name}をスキップ。衛生が悪化し母の健康に影響。メンタル-1` });
     }
     if (!G.toiletMastered && G.toiletStreak >= 3) {
       G.toiletMastered = true;
@@ -2172,8 +2182,9 @@ function confirmDay() {
   } else {
     G.skipHousework++;
     if (G.skipHousework >= 2) {
-      G.motherHealth = Math.max(0, G.motherHealth - 1);
-      dayResults.push({ tag: 'bad', text: '家事を2日連続でスキップ。生活環境が悪化し、母の健康に影響。' });
+      const hwPenalty = G.day >= 4 ? 2 : 1;
+      G.motherHealth = Math.max(0, G.motherHealth - hwPenalty);
+      dayResults.push({ tag: 'bad', text: `家事を2日連続でスキップ。生活環境が悪化し、母の健康に影響。${hwPenalty >= 2 ? '（後半は影響が大きい）' : ''}` });
     } else {
       dayResults.push({ tag: 'info', text: '家事をスキップした。明日もスキップすると母の健康に影響する。' });
     }
@@ -2199,7 +2210,7 @@ function confirmDay() {
 
   // --- Rest ---
   if (sel.has('rest')) {
-    G.mp = Math.min(G.maxMp, G.mp + 2);
+    G.mp = Math.min(G.maxMp, G.mp + 1);
     G.restDays++;
     dayResults.push({ tag: 'good', text: toneText(LANG.tone.rest) });
   }
@@ -2207,9 +2218,13 @@ function confirmDay() {
   // --- Call friend ---
   if (sel.has('callFriend')) {
     G.calledFriendCount++;
-    const mpGain = G.foundPeerSupport ? 2 : 1;
+    const mpGain = 1;
     G.mp = Math.min(G.maxMp, G.mp + mpGain);
     dayResults.push({ tag: 'good', text: t(toneText(LANG.tone.callFriend), { n: mpGain }) });
+    // Peer support: reduces next sudden event probability instead of extra MP
+    if (G.foundPeerSupport) {
+      G._peerSupportBonus = true;
+    }
 
     if (G.calledFriendCount === 2 && !G.foundPeerSupport) {
       G.foundPeerSupport = true;
@@ -2257,8 +2272,19 @@ function confirmDay() {
   // --- Sudden events ---
   processSuddenEvent();
 
+  // Day 6-7: 15% chance of a second sudden event
+  if (G.day >= 6 && Math.random() < 0.15) {
+    processSuddenEvent();
+  }
+
   // --- Pamphlet event (Day 5 or 6, once) ---
   processPamphletEvent();
+
+  // --- Idle time penalty (burnout) ---
+  if (remaining >= 4) {
+    G.mp = Math.max(0, G.mp - 1);
+    dayResults.push({ tag: 'bad', text: 'ぼんやりと時間が過ぎた。何もする気力がなかった。メンタル-1' });
+  }
 
   // --- Game over check ---
   checkGameOver();
@@ -2276,11 +2302,18 @@ function confirmDay() {
    Sudden Event Processing
    ================================================================ */
 function processSuddenEvent() {
-  // Calculate event probability
+  // Calculate event probability (escalates with days)
   let eventProb = 0.30;
+  if (G.day >= 5) eventProb += 0.10;
+  if (G.day >= 6) eventProb += 0.10;
   if (G._watchSkipped) eventProb += 0.20;
   if (G.motherMood === 'uneasy') eventProb += 0.15;
   if (G.motherMood === 'refuse') eventProb += 0.10;
+  // Peer support bonus: talking to someone who understands reduces anxiety
+  if (G._peerSupportBonus) {
+    eventProb -= 0.10;
+    G._peerSupportBonus = false;
+  }
 
   if (Math.random() >= eventProb) {
     // No sudden event — chance for peaceful moment
@@ -2667,12 +2700,12 @@ function goToNight() {
   let actualSleep = allocSleep;
   let nightResults = [];
 
-  // --- Night event probability ---
+  // --- Night event probability (escalates with days) ---
   let nightEventProb = 0.40;
   if (G.motherMood === 'uneasy') nightEventProb += 0.20;
   if (G.medsSkippedYesterday) nightEventProb += 0.15;
-  // Day 4-5 bump
-  if (G.day >= 4) nightEventProb = Math.max(nightEventProb, 0.50);
+  if (G.day >= 6) nightEventProb = Math.max(nightEventProb, 0.70);
+  else if (G.day >= 4) nightEventProb = Math.max(nightEventProb, 0.60);
 
   if (Math.random() < nightEventProb) {
     // Pick a night event
