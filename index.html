@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1日28時間 ～在宅介護～</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ===== CSS Variables / Color Scheme ===== */
+:root {
+  --bg: #faf6f0;
+  --bg-card: #ffffff;
+  --bg-warm: #fff8f0;
+  --text: #3a3535;
+  --text-light: #7a7070;
+  --text-muted: #a89a8f;
+  --accent: #c47a5a;
+  --accent-light: #e8a889;
+  --accent-dark: #9e5a3e;
+  --green: #6a9e6b;
+  --green-light: #e8f5e8;
+  --red: #c45a5a;
+  --red-light: #fde8e8;
+  --blue: #5a7ac4;
+  --blue-light: #e8f0fd;
+  --yellow: #c4a45a;
+  --yellow-light: #fdf5e0;
+  --border: #e0d6cc;
+  --shadow: rgba(80, 60, 40, 0.08);
+  --shadow-md: rgba(80, 60, 40, 0.12);
+  --radius: 12px;
+  --font-serif: 'Noto Serif JP', serif;
+  --font-sans: 'Zen Maru Gothic', sans-serif;
+}
+
+/* ===== Reset & Base ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ===== Container ===== */
+#game-container {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 16px;
+  min-height: 100dvh;
+}
+
+/* ===== Screen System ===== */
+.screen {
+  display: none;
+}
+.screen.active {
+  display: block;
+}
+
+/* ===== Card Base ===== */
+.card {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: 0 2px 8px var(--shadow);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.card:active {
+  transform: scale(0.97);
+}
+
+.card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 2px 12px var(--shadow-md), 0 0 0 2px var(--accent-light);
+}
+
+.card.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.card.completed {
+  opacity: 0.6;
+  background: #f0ede8;
+  position: relative;
+}
+
+.card.completed::after {
+  content: '✅ 設置済み';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--green);
+  background: rgba(255,255,255,0.85);
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 2px solid var(--green);
+}
+
+.card.joy {
+  background: var(--yellow-light);
+  border-color: var(--yellow);
+}
+
+.card.env {
+  background: var(--blue-light);
+  border-color: var(--blue);
+}
+
+/* ===== Typography ===== */
+h1 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+}
+
+h2, h3 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+}
+
+/* ===== Title Screen ===== */
+.title-header {
+  text-align: center;
+  padding: 48px 0 24px;
+}
+
+.title-main {
+  font-size: 2.2rem;
+  letter-spacing: 0.1em;
+  color: var(--accent-dark);
+  margin-bottom: 8px;
+}
+
+.title-sub {
+  font-size: 0.95rem;
+  color: var(--text-light);
+  font-family: var(--font-sans);
+  font-weight: 400;
+}
+
+.premise-panel {
+  background: var(--bg-warm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  margin: 24px 0 32px;
+  line-height: 2;
+  font-size: 0.95rem;
+}
+
+.premise-panel p {
+  margin-bottom: 12px;
+}
+
+.premise-panel p:last-child {
+  margin-bottom: 0;
+}
+
+.premise-emphasis {
+  font-weight: 700;
+  color: var(--accent-dark);
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 16px 24px;
+  font-family: var(--font-sans);
+  font-size: 1.1rem;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: transform 0.1s ease, background 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--accent-dark);
+}
+
+.btn-primary:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--accent);
+  border: 2px solid var(--accent);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-warm);
+}
+
+/* ===== Status Bar ===== */
+.status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  box-shadow: 0 1px 4px var(--shadow);
+}
+
+.stat-item {
+  flex: 1 1 45%;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.stat-bar-track {
+  height: 10px;
+  background: #eee;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.4s ease, background 0.3s ease;
+}
+
+.stat-bar-fill.hp {
+  background: linear-gradient(90deg, #7bc47a, #4a9e4a);
+}
+
+.stat-bar-fill.hp.danger {
+  background: linear-gradient(90deg, #e07070, #c44a4a);
+}
+
+.stat-bar-fill.mp {
+  background: linear-gradient(90deg, #7a9ec4, #4a6a9e);
+}
+
+.stat-bar-fill.mp.danger {
+  background: linear-gradient(90deg, #e07070, #c44a4a);
+}
+
+.stat-value {
+  font-size: 0.75rem;
+  text-align: right;
+  color: var(--text-light);
+  margin-top: 2px;
+}
+
+.stat-money {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.stat-money.danger {
+  color: var(--red);
+}
+
+/* ===== Mother Status ===== */
+.mother-panel {
+  background: var(--bg-warm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.mother-panel .mother-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.mother-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.mother-info span {
+  white-space: nowrap;
+}
+
+/* ===== Morning Screen ===== */
+.day-header {
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  color: var(--accent-dark);
+  margin: 16px 0;
+}
+
+.morning-text {
+  background: var(--bg-card);
+  border-left: 4px solid var(--accent-light);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  font-size: 0.93rem;
+  line-height: 1.9;
+}
+
+.morning-text p {
+  margin-bottom: 10px;
+}
+
+.morning-text p:last-child {
+  margin-bottom: 0;
+}
+
+.sleep-warning {
+  background: var(--red-light);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.88rem;
+  color: var(--red);
+}
+
+/* ===== Allocation Screen ===== */
+.alloc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.remaining-pt {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.remaining-pt.over {
+  color: var(--red);
+}
+
+.action-group {
+  margin-bottom: 20px;
+}
+
+.action-group-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-light);
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+.action-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.action-card {
+  padding: 12px 14px;
+}
+
+.action-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.action-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.action-cost {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+
+.action-detail {
+  font-size: 0.8rem;
+  color: var(--text-light);
+}
+
+.action-penalty {
+  font-size: 0.78rem;
+  color: var(--red);
+}
+
+.action-bonus {
+  font-size: 0.78rem;
+  color: var(--green);
+}
+
+.action-freed {
+  font-size: 0.85rem;
+  color: var(--blue);
+  font-weight: 500;
+}
+
+/* Sleep slider inside card */
+.sleep-card {
+  cursor: default;
+}
+
+.sleep-card:active {
+  transform: none;
+}
+
+.sleep-slider-wrap {
+  margin-top: 8px;
+}
+
+.sleep-slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.sleep-value {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-top: 4px;
+}
+
+/* ===== Result Screen ===== */
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.result-card {
+  padding: 12px 14px;
+  cursor: default;
+}
+
+.result-card:active {
+  transform: none;
+}
+
+.result-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.tag-good {
+  background: var(--green-light);
+  color: var(--green);
+}
+
+.tag-bad {
+  background: var(--red-light);
+  color: var(--red);
+}
+
+.tag-info {
+  background: var(--blue-light);
+  color: var(--blue);
+}
+
+.tag-discovery {
+  background: var(--green-light);
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.tag-warm {
+  background: var(--yellow-light);
+  color: #8a7030;
+}
+
+.result-text {
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.reason-text {
+  font-size: 0.82rem;
+  color: var(--text-light);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* ===== Event Choice Cards ===== */
+.choice-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.choice-card {
+  flex: 1;
+  padding: 12px;
+  font-size: 0.85rem;
+  text-align: center;
+  min-height: auto;
+}
+
+.choice-card.chosen {
+  border-color: var(--green);
+  background: var(--green-light);
+}
+
+.choice-card.not-chosen {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* ===== Night Screen ===== */
+.night-header {
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  color: var(--blue);
+  margin: 16px 0;
+}
+
+/* ===== Ending Screen ===== */
+.ending-title {
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  color: var(--accent-dark);
+  margin: 24px 0 8px;
+}
+
+.ending-message {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 16px 0;
+  font-size: 0.93rem;
+  line-height: 2;
+}
+
+.ending-extra {
+  font-size: 0.9rem;
+  line-height: 1.8;
+  color: var(--text-light);
+  border-left: 3px solid var(--accent-light);
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+
+.report-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 16px 0;
+}
+
+.report-title {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 12px;
+  color: var(--accent-dark);
+}
+
+.report-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--border);
+}
+
+.report-row:last-child {
+  border-bottom: none;
+}
+
+.discovery-list {
+  list-style: none;
+  padding: 0;
+}
+
+.discovery-list li {
+  font-size: 0.88rem;
+  padding: 3px 0;
+  color: var(--green);
+}
+
+.discovery-list li::before {
+  content: '・';
+}
+
+.emotion-section {
+  background: var(--bg-warm);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin: 16px 0;
+}
+
+.emotion-item {
+  font-size: 0.88rem;
+  color: var(--text);
+  padding: 3px 0;
+}
+
+.emotion-item::before {
+  content: '・';
+  color: var(--text-muted);
+}
+
+.emotion-affirm {
+  margin-top: 16px;
+  font-size: 0.9rem;
+  line-height: 1.9;
+  color: var(--text-light);
+}
+
+.social-message {
+  background: var(--blue-light);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 20px 0;
+  font-size: 0.88rem;
+  line-height: 1.9;
+  color: var(--text);
+}
+
+.social-message a {
+  color: var(--blue);
+}
+
+/* ===== Game Over ===== */
+.gameover-overlay {
+  background: rgba(60, 40, 40, 0.15);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 16px 0;
+  text-align: center;
+}
+
+.gameover-text {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  color: var(--red);
+  margin-bottom: 12px;
+}
+
+/* ===== Utility ===== */
+.mb-8 { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-24 { margin-bottom: 24px; }
+.text-center { text-align: center; }
+
+/* ===== Responsive ===== */
+@media (max-width: 375px) {
+  #game-container {
+    padding: 12px;
+  }
+  .title-main {
+    font-size: 1.8rem;
+  }
+  .premise-panel {
+    padding: 18px 14px;
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="game-container">
+
+  <!-- Title Screen -->
+  <div id="screen-title" class="screen active">
+    <div class="title-header">
+      <h1 class="title-main" id="title-main"></h1>
+      <p class="title-sub" id="title-sub"></p>
+    </div>
+    <div class="premise-panel" id="premise-panel"></div>
+    <button class="btn btn-primary" id="btn-start" onclick="startGame()"></button>
+  </div>
+
+  <!-- Morning Screen -->
+  <div id="screen-morning" class="screen"></div>
+
+  <!-- Allocation Screen -->
+  <div id="screen-alloc" class="screen"></div>
+
+  <!-- Result Screen -->
+  <div id="screen-result" class="screen"></div>
+
+  <!-- Night Screen -->
+  <div id="screen-night" class="screen"></div>
+
+  <!-- Ending Screen -->
+  <div id="screen-ending" class="screen"></div>
+
+</div>
+
+<script>
+/* ================================================================
+   LANG — Localization Object (Japanese)
+   ================================================================ */
+const LANG = {
+  // --- UI Common ---
+  ui: {
+    title: '1日28時間',
+    subtitle: '～在宅介護～ 体験ゲーム・ミニ版（7日間）',
+    startButton: 'はじめる',
+    nextDay: '次の日へ',
+    toNight: '夜へ進む',
+    startDay: 'この配分で1日を始める',
+    playAgain: 'もう一度遊ぶ',
+    remaining: '残り {n} 時間',
+    day: '第 {n} 日',
+    night: '夜',
+    allocTitle: '今日の時間を配分する',
+    gameOver: 'ゲームオーバー',
+    seeResult: '結果を見る',
+    statusHp: '体力',
+    statusMp: 'メンタル',
+    statusMoney: '貯金',
+    motherLabel: '母の状態',
+    careLevel: '要介護{n}',
+    sleepPt: '{n} 時間',
+    ptUnit: '{n}pt',
+    costUnit: '⏱ {n}pt',
+    freed: '✨ サービスで免除',
+    masteredToilet: '✨ コツをつかんだ！',
+    masteredMeds: '✨ ルーティン確立！',
+    masteredMeal: '母は食事の時間を楽しみにしている',
+    envHint: '💡 一度設置すれば毎日効果あり',
+    joyUnavailable: '今日は難しそう…',
+    installed: '✅ 設置済み',
+    overWarning: '時間が {n}pt 超過しています',
+    skipPenalty: 'スキップ: ',
+  },
+
+  // --- Premise ---
+  premise: {
+    lines: [
+      'あなたは40代の会社員。',
+      '認知症が進み始めた母（78歳・要介護2）と二人暮らし。',
+      '1日は24時間。',
+      'でも、介護と仕事と生活を回すには、どう計算しても時間が足りない。',
+    ],
+    emphasis: '何かを必ず、諦めなければいけない——',
+    closing: 'そんな7日間を体験してください。',
+  },
+
+  // --- Mother Mood ---
+  mood: {
+    good: { label: '穏やか', icon: '😊' },
+    normal: { label: '普通', icon: '😐' },
+    uneasy: { label: '不穏', icon: '😟' },
+    refuse: { label: '拒否的', icon: '😠' },
+  },
+
+  // --- Mother Health ---
+  healthLabel: {
+    3: '安定',
+    2: 'やや不安定',
+    1: '悪化',
+  },
+
+  // --- Morning Flavor Text (7 days) ---
+  morning: [
+    // Day 1
+    '朝6時。アラームより先に、母の声で目が覚めた。\n「……お父さん？」\n父はもう10年前に亡くなっている。\n今日も、1日が始まる。',
+    // Day 2
+    '朝。昨日の疲れが少し残っている。\n台所に行くと、母がぼんやりとテレビを見ていた。\nチャンネルは砂嵐だった。',
+    // Day 3
+    '朝。母は穏やかに寝ていた。\n起こすのが少しためらわれるほどに。\nでも、薬の時間だ。',
+    // Day 4
+    '朝。目の下のクマが濃くなっている気がする。\n鏡を見る余裕もなく、母の部屋に向かう。',
+    // Day 5
+    '朝。体が重い。\nでも母は関係なく、朝が来れば目を覚ます。\n今日もやるしかない。',
+    // Day 6
+    '朝。母が珍しく自分で着替えようとしていた。\nボタンを全部かけ違えていたけれど——\nその姿が、少しだけ嬉しかった。',
+    // Day 7
+    '最後の朝。\nこの生活に「最後」はないのだけれど、\n今は、今日1日のことだけを考える。',
+  ],
+
+  // --- Day 3 / Day 5 fixed events ---
+  morningFixed: {
+    3: 'スマホに仕事先からのメッセージ。\n『最近、遅刻や欠勤が増えていますが…大丈夫ですか？』',
+    5: '友人から久しぶりのLINE。\n『たまにはご飯でもどう？』\n——行きたい。でも、母を置いていけない。',
+  },
+
+  // --- Sleep warnings ---
+  sleepWarning: {
+    severe: '⚠ 深刻な寝不足：昨夜はほとんど眠れなかった。体がふらつく。',
+    moderate: '⚠ 寝不足：昨夜の睡眠は十分ではなかった。',
+  },
+
+  // --- Action groups ---
+  actionGroups: {
+    service: '🏥 外部サービス',
+    care: '🤝 介護',
+    life: '🏠 生活',
+    work: '💼 仕事',
+    recovery: '💆 回復',
+    env: '🔧 環境改善',
+    joy: '🌸 小さな喜び',
+  },
+
+  // --- Actions ---
+  actions: {
+    meal_m: { name: '朝食介助', skip: '母の健康-1', detail: '母の朝食を準備し、食べさせる' },
+    meal_l: { name: '昼食介助', skip: '母の健康-1', detail: '母の昼食を準備し、食べさせる' },
+    meal_e: { name: '夕食介助', skip: '母の健康-1', detail: '母の夕食を準備し、食べさせる' },
+    toilet: { name: '排泄介助', skip: 'メンタル-1', detail: 'トイレの付き添いと処理' },
+    meds: { name: '服薬管理', skip: '翌日の不穏リスクUP', detail: '薬を準備し、飲ませる' },
+    watch: { name: '見守り', skip: '突発イベント確率UP', detail: '母の様子を見守る' },
+    myMeal: { name: '自分の食事', skip: '体力-1', detail: '自分のご飯を食べる時間' },
+    sleep: { name: '睡眠', skip: '寝不足で判断力低下', detail: '' },
+    housework: { name: '家事', skip: '2日連続スキップで母の健康-1', detail: '掃除・洗濯・片付け' },
+    workFull: { name: 'フルタイム勤務', skip: '', detail: '' },
+    workHalf: { name: '時短勤務', skip: '', detail: '' },
+    rest: { name: '休息・趣味', skip: '', detail: '自分だけの時間' },
+    callFriend: { name: '友人に電話', skip: '', detail: '誰かと話す時間' },
+    dayService: { name: 'デイサービス', skip: '', detail: '食事・排泄・見守りを任せられる' },
+    visitCare: { name: '訪問介護', skip: '', detail: '排泄介助を任せられる' },
+    nightLight: { name: '廊下に常夜灯を設置', skip: '', detail: '夜間トイレコール時の睡眠減少を軽減' },
+    toiletSign: { name: 'トイレに貼り紙（大きく「トイレ」）', skip: '', detail: '排泄介助の寝不足時失敗率を半減' },
+    entranceSensor: { name: '玄関にセンサー設置', skip: '', detail: '徘徊イベントのダメージ軽減' },
+    music: { name: '母と好きだった音楽を聴く', skip: '', detail: '' },
+    album: { name: '母と昔の写真を見る', skip: '', detail: '' },
+  },
+
+  // --- Events ---
+  events: {
+    theft_delusion: {
+      text: '「お財布がない！あんた盗ったでしょう！」',
+      reason: '記憶障害により、しまった場所を忘れてしまいます。不安から身近な人を疑うのは認知症の典型的な症状です。わざとではありません。',
+      emotion: '疑われる理不尽さに、怒りを感じた',
+      choiceA: { label: '盗んでない！と反論する', mp: -1 },
+      choiceB: { label: '一緒に探しましょう、と声をかける', mp: 0, learnMsg: '否定せず寄り添うと、母は少し落ち着いた。——戦わないという選択。' },
+    },
+    go_home: {
+      text: '「家に帰りたい…」——ここが家なのに。',
+      reason: '見当識障害により「今いる場所」がわからなくなります。本人にとっては、本当に知らない場所にいる恐怖を感じています。',
+      emotion: '何も言えなくて、悲しくなった',
+      choiceA: { label: 'ここが家だよ、と訂正する', mp: -1 },
+      choiceB: { label: 'そうだね、一緒に帰ろうか、と話を合わせる', mp: 0, learnMsg: '母の世界に合わせた。正しさより、安心を。' },
+    },
+    fall: {
+      text: 'ドンッ！——母が廊下で転んでいた。幸いケガはなかった。',
+      reason: '加齢と認知機能の低下により、空間認識や反射能力が落ちています。転倒は在宅介護で最も多い事故のひとつです。',
+      emotion: '自分がそばにいなかったことへの罪悪感',
+      choiceA: null,
+      choiceB: null,
+    },
+    wander: {
+      text: '母が玄関から出ようとしていた。——心臓が止まるかと思った。',
+      reason: '徘徊は「目的のある行動」です。本人は何かを探したり、どこかに行こうとしています。ただ、途中で目的を忘れてしまうのです。',
+      emotion: '恐怖と、目を離した自分への怒り',
+      choiceA: { label: 'ダメ！と止める', mp: -2 },
+      choiceB: { label: 'どこに行くの？一緒に行こうか、と声をかける', mp: -1, learnMsg: '本人にとって徘徊は目的のある行動。まず聞いてみる、それだけで違う。' },
+    },
+    verbal_abuse: {
+      text: '「触るな！」——入浴介助を拒否され、暴言を浴びた。',
+      reason: '認知症による不安や混乱から、自分を守ろうとして攻撃的になることがあります。本人も苦しんでいます。',
+      emotion: '傷ついた。こんなに頑張っているのに',
+      choiceA: { label: 'なんでそんなことを言うの！と怒る', mp: -2 },
+      choiceB: { label: '少し距離を置いて、時間をおく', mp: -1, learnMsg: '離れることは逃げではない。お互いのための距離。' },
+    },
+  },
+
+  // --- Peaceful moments ---
+  peaceful: [
+    '母がふと、昔の話を始めた。「あの頃はねぇ……」穏やかな午後だった。',
+    '母が小さく「ありがとう」と言った。その一言で、少しだけ報われた。',
+    '窓の外を一緒に眺めた。猫が塀の上を歩いていた。母が笑った。',
+  ],
+
+  // --- Night events ---
+  nightEvents: {
+    toiletCall1: '夜中、母がトイレに起きた。付き添って、また寝かしつけた。',
+    toiletCall3: '夜中に3回、母がトイレに起きた。そのたびに付き添った。',
+    nightWander: '深夜、母が家の中を歩き回っていた。落ち着かせるのに時間がかかった。',
+    nightScream: '深夜、母が大声を上げた。駆けつけると、何かに怯えていた。',
+    toiletCall1NightLight: '常夜灯のおかげで、母が自分でトイレに行けた。',
+    toiletCall3NightLight: '常夜灯があっても3回目は付き添った。でも1回分は自力で行けた。',
+    nightWanderSensor: 'センサーが鳴って、すぐに気づけた。大事に至らなかった。',
+  },
+
+  // --- Sleep result labels ---
+  sleepResult: {
+    good: '十分な睡眠がとれた。',
+    light: '少し寝不足だが、なんとかなる。',
+    bad: '寝不足だ。頭がぼんやりする。',
+    severe: '深刻な寝不足。体が鉛のように重い。',
+    disrupted: '{n}pt確保したのに、実質{m}ptしか眠れなかった。',
+  },
+
+  // --- Night emotions ---
+  nightEmotions: {
+    sleepless: '眠れない夜。泣きたくなった',
+    wanderNight: 'また眠れない。いつまで続くのか',
+  },
+
+  // --- Learning messages ---
+  learning: {
+    toilet: '排泄介助のタイミングが掴めてきた。\n——試行錯誤は無駄じゃなかった。\n（排泄介助コスト 2pt → 1pt）',
+    meds: '毎食後に薬を出す。そのルーティンが母にも定着した。\n（服薬管理 1pt → 0pt：自動化）',
+    meal: '母が好きなおかずがわかってきた。食事の時間が少し穏やかになった。\n（母の穏やか確率+10%）',
+  },
+
+  // --- Support network ---
+  support: {
+    peerFound: '友人に打ち明けたら、実は友人の親も最近物忘れが増えているという。\n『お互いさまだね』\n——同じ境遇の人がこんなに近くにいた。\n（以降の友人電話: メンタル+1 → +2）',
+  },
+
+  // --- Environment improvement messages ---
+  envMessages: {
+    nightLight: '廊下に常夜灯をつけた。小さな光が、夜の不安を少しだけ和らげる。\n（夜間トイレコール時の睡眠減少-1軽減）',
+    toiletSign: 'トイレのドアに大きく『トイレ』と貼った。母が自分で見つけられるかもしれない。\n（排泄介助の寝不足時失敗率を半減）',
+    entranceSensor: '玄関にセンサーをつけた。出ようとしたらすぐわかる。それだけで、少し安心できる。\n（徘徊イベントのダメージ軽減）',
+  },
+
+  // --- Joy messages ---
+  joyMessages: {
+    music: '母の好きだった曲を流した。目を閉じて、小さく口ずさんでいた。\n——認知症でも、感情は残っている。',
+    musicEmotion: '母と音楽を聴いた。少しだけ、昔に戻れた気がした',
+    album: '昔の写真を一緒に見た。『この子は誰？』\n——私のことだよ、お母さん。でも、母は楽しそうだった。',
+    albumEmotion: '母と写真を見た。嬉しいのか悲しいのか、わからなかった',
+  },
+
+  // --- Pamphlet ---
+  pamphlet: {
+    text: 'ケアマネージャーが訪問。\n『お母様の状態を見ていると、{facility}も選択肢のひとつかもしれません。パンフレットだけ、置いておきますね。』\n——テーブルの上のパンフレットを、すぐにはめくれなかった。',
+    notePrompt: 'ケアマネ：『あと……もしあなたに何かあった時のために、お母様の日常のことを書いたメモを作っておきませんか？薬の種類、かかりつけ医、好きな食べ物、落ち着く声かけ。誰かに引き継ぐ時に必ず役立ちます。』',
+    noteYes: '対処ノートを書いておく',
+    noteNo: '今はそんな余裕がない',
+    noteYesMsg: '書き出してみると、自分がどれだけ母のことを知っているかに気づいた。この知識は、あなたにしかないもの。',
+    noteNoMsg: 'ノートは白紙のまま、棚に置いた。',
+    learnedAuto: '前に学んだ対応を、自然にできるようになっていた。',
+  },
+
+  // --- Endings ---
+  endings: {
+    hp: {
+      title: '倒れた日',
+      message: 'あなたの体は限界でした。\nある朝、起き上がれなくなり、救急車で病院へ。\n母は緊急ショートステイに預けられました。\n\n——あなたが倒れた時、母を支える人は誰もいなくなりました。\n介護者を守ることは、介護される人を守ることです。',
+    },
+    mp: {
+      title: 'もう無理だ',
+      message: 'ある朝、涙が止まらなくなりました。\n母に声をかけることすらできない。\nそれは心が出した最後の警告でした。\n\n——あなたが壊れたら、全てが止まります。\n助けを求めることは、あなたと母、二人のための行動です。',
+    },
+    alone: {
+      title: 'ひとりの背中',
+      message: '7日間、あなたは一人で全部やろうとしました。\n誰にも頼らず、自分の体と心を削りながら。\nそれは強さかもしれない。\nでも——ずっとは続けられません。',
+    },
+    connected: {
+      title: 'つながる手',
+      message: 'あなたは外部の力を借りることを選びました。\n助けを求めることは、弱さではありません。\nむしろ、介護を続けるために最も大切な判断でした。',
+    },
+    firstStep: {
+      title: '最初の一歩',
+      message: '一度だけ、外の力を借りました。\nその一歩は小さく見えるかもしれません。\nでも、その一歩がなければ、この7日間は乗り切れなかったかもしれません。',
+    },
+  },
+
+  // --- Ending extras ---
+  endingExtras: {
+    peaceful: 'ふと思い出す。あの日、母が笑って話してくれた昔のこと。\n介護の日々の中にも、確かに光はあった。',
+    music: 'あの曲を聴いた時の母の表情を、きっとずっと覚えている。\n認知症でも、感情は残っている。音楽が教えてくれたこと。',
+    album: '昔の写真の中の母は、今と同じ目をしていた。\n忘れてしまっても、一緒に笑えた時間は確かにあった。',
+    discovery: 'あなたは試行錯誤の中で、{n}個の「できること」を見つけました。\n正解は最初からあるのではなく、続ける中で見えてくるものでした。\n——魔法の解決策はない。でも、小さな工夫の積み重ねで、状況は変えられる。',
+    coping: '「戦わない」という選択を、あなたは学びました。\n否定するのではなく、寄り添う。正しさより、安心を。\nそれは弱さではなく、深い理解です。',
+    pamphlet: 'テーブルの上のパンフレットは、まだ開いていない。\nでも、選択肢があることを知っている。それだけで、少し違う。\n決断は今日ではなくていい。でも、いつか——その日のために、知っておくことに意味がある。',
+    backupNote: 'あなたは対処ノートを書いた。薬の種類、好きな食べ物、落ち着く声かけ——\nそれは、あなたにしか書けない記録。もしもの時、それが母を守る。',
+    peerSupport: 'あなたは一人じゃなかった。\n電話の向こうにも、同じ思いを抱えている人がいた。\n支えは、思っているより近くにある。',
+  },
+
+  // --- Report labels ---
+  report: {
+    title7days: 'あなたの7日間',
+    sacrificed: 'あなたが削ったもの',
+    avgSleep: '平均睡眠時間',
+    skippedMeals: '食事を抜いた回数',
+    restTime: '趣味に使えた時間',
+    protected: 'あなたが守ったもの',
+    mealsServed: '母に食事を届けた回数',
+    peacefulTimes: '穏やかな時間',
+    workedDays: '仕事を続けた日数',
+    discoveries: 'あなたが見つけた「できること」',
+    discoveryItems: {
+      toiletMastered: '排泄介助のコツをつかんだ',
+      medsMastered: '服薬のルーティンを確立した',
+      mealMastered: '母の食事の好みがわかった',
+      nightLight: '廊下に常夜灯を設置した',
+      toiletSign: 'トイレに貼り紙をした',
+      entranceSensor: '玄関にセンサーを設置した',
+      learnedCoping: '「一緒に探そう」と寄り添えた',
+      foundPeerSupport: '同じ境遇の仲間を見つけた',
+      madeBackupNote: '対処ノートを書いた',
+      musicPlayed: '母と音楽を聴いた',
+      albumWatched: '母と写真を見た',
+    },
+    stats: '数字で見る7日間',
+    serviceUsed: '外部サービス利用',
+    finalMoney: '最終貯金残高',
+    motherState: '母の状態',
+    yourHp: 'あなたの体力',
+    yourMp: 'あなたのメンタル',
+    timesUnit: '{n} 回',
+    daysUnit: '{n} / 7日',
+    hoursPerDay: '{n} 時間/日',
+    mealsUnit: '{n} / 21回',
+    hoursUnit: '{n} 時間',
+  },
+
+  // --- Emotion section ---
+  emotionSection: {
+    title: 'あなたの感情',
+    intro: 'この7日間、あなたはこんな感情を経験しました：',
+    affirm: 'これらは全て、正常な感情です。\n介護をしている人なら、誰もが通る道です。\n怒っていい。泣いていい。逃げ出したくなっていい。\nその感情を否定しなくていいのです。',
+  },
+
+  // --- Culture-dependent (locale) ---
+  locale: {
+    currency: '円',
+    currencyFormat: (n) => `${n.toLocaleString()}円`,
+    services: {
+      dayService: { name: 'デイサービス', cost: 2000, desc: '介護保険適用の通所介護' },
+      visitCare: { name: '訪問介護', cost: 500, desc: '介護保険適用の身体介護' },
+    },
+    socialMessage: {
+      stats: '日本では約629万人が介護に携わっています。\n在宅介護者の約7割がストレスを抱え、\nその多くが「自分の時間がない」と感じています。',
+      cta: 'もし周りに介護をしている人がいたら、\n「大丈夫？」のひとことが、大きな支えになります。',
+      resources: [
+        '▶ 相談窓口：地域包括支援センター（お住まいの市区町村）',
+        '▶ 介護の相談：各市区町村の福祉課',
+      ],
+    },
+    pamphletText: 'サービス付き高齢者向け住宅',
+    workIncome: { full: 8000, half: 4000 },
+    fixedCost: 15000,
+    supplyCost: 300,
+    envCosts: {
+      nightLight: 500,
+      toiletSign: 0,
+      entranceSensor: 3000,
+    },
+  },
+};
+
+
+/* ================================================================
+   Game State
+   ================================================================ */
+let G = {};
+
+function initGameState() {
+  G = {
+    day: 1,
+    maxDays: 7,
+    hp: 10,
+    maxHp: 10,
+    mp: 10,
+    maxMp: 10,
+    money: 50000,
+    weeklyFixedCost: LANG.locale.fixedCost,
+    motherHealth: 3,
+    motherMood: 'normal',
+    motherCare: 2,
+    prevSleep: 6,
+    medsSkippedYesterday: false,
+
+    // Records
+    skippedMeals: 0,
+    totalSleepPt: 0,
+    usedService: 0,
+    workedDays: 0,
+    skipHousework: 0,
+    restDays: 0,
+    hadPeacefulMoment: false,
+    gameOver: false,
+    gameOverReason: '',
+    mealsServed: 0,
+    peacefulCount: 0,
+
+    // Learning system
+    toiletStreak: 0,
+    toiletMastered: false,
+    medsStreak: 0,
+    medsMastered: false,
+    mealStreak: 0,
+    mealMastered: false,
+
+    // Environment improvements
+    nightLight: false,
+    toiletSign: false,
+    entranceSensor: false,
+
+    // Coping skills
+    learnedCoping: {},
+
+    // Event history
+    seenEvents: {},
+
+    // Pamphlet + backup note
+    receivedPamphlet: false,
+    madeBackupNote: false,
+
+    // Support network
+    calledFriendCount: 0,
+    foundPeerSupport: false,
+
+    // Small joys
+    musicPlayed: false,
+    albumWatched: false,
+
+    // Discovery count
+    discoveryCount: 0,
+
+    // Emotion log
+    emotionLog: [],
+  };
+}
+
+
+/* ================================================================
+   Screen Management
+   ================================================================ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const target = document.getElementById(id);
+  if (target) target.classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+
+/* ================================================================
+   Title Screen Rendering
+   ================================================================ */
+function renderTitle() {
+  document.getElementById('title-main').textContent = LANG.ui.title;
+  document.getElementById('title-sub').textContent = LANG.ui.subtitle;
+
+  const panel = document.getElementById('premise-panel');
+  let html = '';
+  LANG.premise.lines.forEach(line => {
+    html += `<p>${line}</p>`;
+  });
+  html += `<p class="premise-emphasis">${LANG.premise.emphasis}</p>`;
+  html += `<p>${LANG.premise.closing}</p>`;
+  panel.innerHTML = html;
+
+  document.getElementById('btn-start').textContent = LANG.ui.startButton;
+}
+
+
+/* ================================================================
+   Start Game
+   ================================================================ */
+function startGame() {
+  initGameState();
+  console.log('ゲーム開始', G);
+  // Will navigate to morning screen in later steps
+  // For now, just log
+}
+
+
+/* ================================================================
+   Initialize
+   ================================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  renderTitle();
+  showScreen('screen-title');
+});
+</script>
+
+</body>
+</html>
