@@ -455,7 +455,33 @@ h2, h3 {
 
 .sleep-slider {
   width: 100%;
-  accent-color: var(--accent);
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  outline: none;
+}
+
+.sleep-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px var(--shadow-md);
+}
+
+.sleep-slider::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px var(--shadow-md);
 }
 
 .sleep-value {
@@ -708,6 +734,59 @@ h2, h3 {
   .premise-panel {
     padding: 18px 14px;
   }
+  .action-card {
+    padding: 10px 12px;
+  }
+  .btn {
+    padding: 14px 20px;
+  }
+}
+
+/* ===== Animations ===== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.screen.active {
+  animation: fadeIn 0.35s ease;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.result-list .card {
+  animation: slideUp 0.3s ease both;
+}
+.result-list .card:nth-child(2) { animation-delay: 0.06s; }
+.result-list .card:nth-child(3) { animation-delay: 0.12s; }
+.result-list .card:nth-child(4) { animation-delay: 0.18s; }
+.result-list .card:nth-child(5) { animation-delay: 0.24s; }
+.result-list .card:nth-child(6) { animation-delay: 0.30s; }
+.result-list .card:nth-child(7) { animation-delay: 0.36s; }
+.result-list .card:nth-child(8) { animation-delay: 0.42s; }
+
+@keyframes discoveryGlow {
+  0%, 100% { box-shadow: 0 2px 8px var(--shadow); }
+  50% { box-shadow: 0 0 16px 4px rgba(106, 158, 107, 0.35); }
+}
+
+.card.discovery-card {
+  animation: slideUp 0.3s ease both, discoveryGlow 1.5s ease 0.5s 2;
+}
+
+.gameover-overlay {
+  animation: fadeIn 0.8s ease;
+}
+
+.ending-title {
+  animation: fadeIn 0.6s ease;
+}
+
+.ending-extra {
+  animation: slideUp 0.4s ease both;
 }
 </style>
 </head>
@@ -1101,6 +1180,34 @@ const LANG = {
     affirm: 'これらは全て、正常な感情です。\n介護をしている人なら、誰もが通る道です。\n怒っていい。泣いていい。逃げ出したくなっていい。\nその感情を否定しなくていいのです。',
   },
 
+  // --- Tone-varied text (MP-linked) ---
+  tone: {
+    rest: [
+      '少しだけ、自分の時間が持てた。メンタル+2',
+      '疲れた体を少し休めた。……もっと休みたい。メンタル+2',
+      '……休んでいいのだろうか。罪悪感がある。メンタル+2',
+      '何もする気力がない。ただ座っていた。メンタル+2',
+    ],
+    myMealSkip: [
+      '自分の食事をスキップした。体力が削られた。',
+      'また自分のご飯を抜いた。慣れてきた自分が怖い。体力-1',
+      'もう何日まともに食べてない。体力-1',
+      '食欲なんてない。でも体が重い。体力-1',
+    ],
+    callFriend: [
+      '友人に電話した。少し気が楽になった。メンタル+{n}',
+      '友人と話せた。声を聞くだけで少し楽になる。メンタル+{n}',
+      '電話口で泣いてしまった。でも、聞いてくれた。メンタル+{n}',
+      '何を話したか覚えていない。でも、つながっていた。メンタル+{n}',
+    ],
+    peaceful: [
+      '{text} メンタル+1',
+      '{text} メンタル+1',
+      '{text} ——こんな瞬間があるから、まだやれる。メンタル+1',
+      '{text} ——涙が出た。メンタル+1',
+    ],
+  },
+
   // --- Culture-dependent (locale) ---
   locale: {
     currency: '円',
@@ -1252,6 +1359,14 @@ function t(template, replacements) {
 /** Convert \n in text to <br> for HTML rendering */
 function nl2br(text) {
   return text.replace(/\n/g, '<br>');
+}
+
+/** Pick MP-linked tone variant: [0]=normal, [1]=tired, [2]=exhausted, [3]=broken */
+function toneText(variants) {
+  if (G.mp >= 8) return variants[0];
+  if (G.mp >= 5) return variants[1];
+  if (G.mp >= 3) return variants[2];
+  return variants[3];
 }
 
 
@@ -1442,8 +1557,9 @@ function getActions() {
   const isRefuse = G.motherMood === 'refuse';
   const refuseExtra = isRefuse ? 1 : 0;
 
-  // Base toilet cost, reduced by mastery
-  const toiletCost = G.toiletMastered ? 1 : (2 + refuseExtra);
+  // Base toilet cost, reduced by mastery; +1 when mother's health is critical
+  let toiletCost = G.toiletMastered ? 1 : (2 + refuseExtra);
+  if (G.motherHealth <= 1 && !G.toiletMastered) toiletCost += 1;
   // Base meds cost, reduced by mastery
   const medsCost = G.medsMastered ? 0 : (1 + refuseExtra);
 
@@ -1953,7 +2069,7 @@ function confirmDay() {
   } else {
     G.hp = Math.max(0, G.hp - 1);
     G.skippedMeals++;
-    dayResults.push({ tag: 'bad', text: `${LANG.actions.myMeal.name}をスキップ。体力が削られた。` });
+    dayResults.push({ tag: 'bad', text: toneText(LANG.tone.myMealSkip) });
   }
 
   // --- Housework ---
@@ -1984,7 +2100,7 @@ function confirmDay() {
   if (sel.has('rest')) {
     G.mp = Math.min(G.maxMp, G.mp + 2);
     G.restDays++;
-    dayResults.push({ tag: 'good', text: '少しだけ、自分の時間が持てた。メンタル+2' });
+    dayResults.push({ tag: 'good', text: toneText(LANG.tone.rest) });
   }
 
   // --- Call friend ---
@@ -1992,7 +2108,7 @@ function confirmDay() {
     G.calledFriendCount++;
     const mpGain = G.foundPeerSupport ? 2 : 1;
     G.mp = Math.min(G.maxMp, G.mp + mpGain);
-    dayResults.push({ tag: 'good', text: `友人に電話した。メンタル+${mpGain}` });
+    dayResults.push({ tag: 'good', text: t(toneText(LANG.tone.callFriend), { n: mpGain }) });
 
     if (G.calledFriendCount === 2 && !G.foundPeerSupport) {
       G.foundPeerSupport = true;
@@ -2072,7 +2188,7 @@ function processSuddenEvent() {
       G.mp = Math.min(G.maxMp, G.mp + 1);
       G.hadPeacefulMoment = true;
       G.peacefulCount++;
-      dayResults.push({ tag: 'warm', text: peaceText + ' メンタル+1' });
+      dayResults.push({ tag: 'warm', text: t(toneText(LANG.tone.peaceful), { text: peaceText }) });
     }
     return;
   }
@@ -2347,7 +2463,8 @@ function renderResultCard(r) {
   if (r.eventId) cardId = `id="event-card-${r.eventId}"`;
   if (r.isPamphlet) cardId = `id="event-card-pamphlet"`;
 
-  let html = `<div class="card result-card" ${cardId}>`;
+  const extraClass = r.tag === 'discovery' ? ' discovery-card' : '';
+  let html = `<div class="card result-card${extraClass}" ${cardId}>`;
   html += `<span class="result-tag ${tagData.cls}">${tagData.label}</span>`;
   html += `<div class="result-text">${nl2br(r.text)}</div>`;
 
