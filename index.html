@@ -1739,18 +1739,596 @@ function goToAlloc() {
 
 
 /* ================================================================
-   Confirm Day (placeholder for Step 4)
+   Step 4: Confirm Day — Judgment Phase
    ================================================================ */
+let dayResults = [];       // Array of result card objects for display
+let pendingChoices = 0;    // Count of unresolved event choices
+
 function confirmDay() {
   const remaining = calcRemaining();
   if (remaining < 0) return;
-  console.log('1日を始める（ステップ4で実装）', {
-    selected: [...allocState.selected],
-    freedActions: [...allocState.freedActions],
-    sleepPt: allocState.sleepPt,
-    workChoice: allocState.workChoice,
-    remaining,
+
+  dayResults = [];
+  pendingChoices = 0;
+  const actions = getActions();
+  const sel = allocState.selected;
+  const freed = allocState.freedActions;
+
+  // --- Failure check (sleep deprivation) ---
+  let failRate = 0;
+  if (G.prevSleep <= 1) failRate = 0.35;
+  else if (G.prevSleep <= 3) failRate = 0.20;
+  else if (G.prevSleep <= 4) failRate = 0.15;
+  // toiletSign halves failure rate for toilet
+  const toiletFailRate = G.toiletSign ? failRate / 2 : failRate;
+
+  function didFail(rate) { return Math.random() < rate; }
+
+  // --- Daily supply cost ---
+  G.money -= LANG.locale.supplyCost;
+  dayResults.push({ tag: 'info', text: `日用品費: -${LANG.locale.currencyFormat(LANG.locale.supplyCost)}` });
+
+  // --- Fixed cost on Day 4 and Day 7 ---
+  if (G.day === 4 || G.day === 7) {
+    G.money -= G.weeklyFixedCost;
+    dayResults.push({ tag: 'info', text: `固定費引き落とし: -${LANG.locale.currencyFormat(G.weeklyFixedCost)}` });
+  }
+
+  // --- Service processing ---
+  if (sel.has('dayService')) {
+    G.money -= LANG.locale.services.dayService.cost;
+    G.usedService++;
+    dayResults.push({ tag: 'good', text: `${LANG.actions.dayService.name}を利用した。食事・排泄・見守りを任せられた。` });
+  }
+  if (sel.has('visitCare')) {
+    G.money -= LANG.locale.services.visitCare.cost;
+    G.usedService++;
+    dayResults.push({ tag: 'good', text: `${LANG.actions.visitCare.name}を利用した。排泄介助を任せられた。` });
+  }
+
+  // --- Meal processing ---
+  const mealIds = ['meal_m', 'meal_l', 'meal_e'];
+  let mealsToday = 0;
+  for (const mid of mealIds) {
+    const isFreed = freed.has(mid);
+    const isDone = sel.has(mid) || isFreed;
+    if (isDone) {
+      if (!isFreed && didFail(failRate)) {
+        dayResults.push({ tag: 'bad', text: `${LANG.actions[mid].name}——寝不足でうまくいかなかった。` });
+        G.motherHealth = Math.max(0, G.motherHealth - 1);
+      } else {
+        mealsToday++;
+        G.mealsServed++;
+      }
+    } else {
+      G.motherHealth = Math.max(0, G.motherHealth - 1);
+      G.skippedMeals++;
+      dayResults.push({ tag: 'bad', text: `${LANG.actions[mid].name}をスキップした。母の健康が悪化。` });
+    }
+  }
+  // Meal streak
+  if (mealsToday === 3) {
+    G.mealStreak++;
+  } else {
+    G.mealStreak = 0;
+  }
+  // Meal mastery check
+  if (!G.mealMastered && G.mealStreak >= 3) {
+    G.mealMastered = true;
+    G.discoveryCount++;
+    dayResults.push({ tag: 'discovery', text: LANG.learning.meal });
+  }
+
+  // --- Toilet processing ---
+  {
+    const isFreed = freed.has('toilet');
+    const isDone = sel.has('toilet') || isFreed;
+    if (isDone) {
+      if (!isFreed && didFail(toiletFailRate)) {
+        dayResults.push({ tag: 'bad', text: `${LANG.actions.toilet.name}——寝不足でうまくいかなかった。` });
+        G.mp = Math.max(0, G.mp - 1);
+        G.toiletStreak = 0;
+      } else {
+        G.toiletStreak++;
+      }
+    } else {
+      G.mp = Math.max(0, G.mp - 1);
+      G.toiletStreak = 0;
+      dayResults.push({ tag: 'bad', text: `${LANG.actions.toilet.name}をスキップ。メンタルが削られた。` });
+    }
+    if (!G.toiletMastered && G.toiletStreak >= 3) {
+      G.toiletMastered = true;
+      G.discoveryCount++;
+      dayResults.push({ tag: 'discovery', text: LANG.learning.toilet });
+    }
+  }
+
+  // --- Meds processing ---
+  {
+    const isFreed = freed.has('meds');
+    const isDone = sel.has('meds') || isFreed || (G.medsMastered);
+    if (isDone) {
+      if (!isFreed && !G.medsMastered && didFail(failRate)) {
+        dayResults.push({ tag: 'bad', text: `${LANG.actions.meds.name}——寝不足でうまくいかなかった。` });
+        G.medsSkippedYesterday = true;
+        G.medsStreak = 0;
+      } else {
+        G.medsSkippedYesterday = false;
+        G.medsStreak++;
+      }
+    } else {
+      G.medsSkippedYesterday = true;
+      G.medsStreak = 0;
+      dayResults.push({ tag: 'bad', text: `${LANG.actions.meds.name}をスキップ。明日、不穏になるリスクが上がった。` });
+    }
+    if (!G.medsMastered && G.medsStreak >= 3) {
+      G.medsMastered = true;
+      G.discoveryCount++;
+      dayResults.push({ tag: 'discovery', text: LANG.learning.meds });
+    }
+  }
+
+  // --- Watch processing ---
+  {
+    const isFreed = freed.has('watch');
+    const isDone = sel.has('watch') || isFreed;
+    if (!isDone) {
+      dayResults.push({ tag: 'bad', text: `${LANG.actions.watch.name}をスキップ。突発イベントが起きやすくなった。` });
+    }
+    // Watch skip flag for event probability
+    G._watchSkipped = !isDone;
+  }
+
+  // --- My meal ---
+  if (sel.has('myMeal')) {
+    // ok
+  } else {
+    G.hp = Math.max(0, G.hp - 1);
+    G.skippedMeals++;
+    dayResults.push({ tag: 'bad', text: `${LANG.actions.myMeal.name}をスキップ。体力が削られた。` });
+  }
+
+  // --- Housework ---
+  if (sel.has('housework')) {
+    G.skipHousework = 0;
+  } else {
+    G.skipHousework++;
+    if (G.skipHousework >= 2) {
+      G.motherHealth = Math.max(0, G.motherHealth - 1);
+      dayResults.push({ tag: 'bad', text: '家事を2日連続でスキップ。生活環境が悪化し、母の健康に影響。' });
+    } else {
+      dayResults.push({ tag: 'info', text: '家事をスキップした。明日もスキップすると母の健康に影響する。' });
+    }
+  }
+
+  // --- Work ---
+  if (allocState.workChoice === 'workFull') {
+    G.money += LANG.locale.workIncome.full;
+    G.workedDays++;
+    dayResults.push({ tag: 'info', text: `フルタイム勤務。+${LANG.locale.currencyFormat(LANG.locale.workIncome.full)}` });
+  } else if (allocState.workChoice === 'workHalf') {
+    G.money += LANG.locale.workIncome.half;
+    G.workedDays++;
+    dayResults.push({ tag: 'info', text: `時短勤務。+${LANG.locale.currencyFormat(LANG.locale.workIncome.half)}` });
+  }
+
+  // --- Rest ---
+  if (sel.has('rest')) {
+    G.mp = Math.min(G.maxMp, G.mp + 2);
+    G.restDays++;
+    dayResults.push({ tag: 'good', text: '少しだけ、自分の時間が持てた。メンタル+2' });
+  }
+
+  // --- Call friend ---
+  if (sel.has('callFriend')) {
+    G.calledFriendCount++;
+    const mpGain = G.foundPeerSupport ? 2 : 1;
+    G.mp = Math.min(G.maxMp, G.mp + mpGain);
+    dayResults.push({ tag: 'good', text: `友人に電話した。メンタル+${mpGain}` });
+
+    if (G.calledFriendCount === 2 && !G.foundPeerSupport) {
+      G.foundPeerSupport = true;
+      G.discoveryCount++;
+      dayResults.push({ tag: 'discovery', text: LANG.support.peerFound });
+    }
+  }
+
+  // --- Environment improvements ---
+  if (sel.has('nightLight') && !G.nightLight) {
+    G.nightLight = true;
+    G.money -= LANG.locale.envCosts.nightLight;
+    G.discoveryCount++;
+    dayResults.push({ tag: 'discovery', text: LANG.envMessages.nightLight });
+  }
+  if (sel.has('toiletSign') && !G.toiletSign) {
+    G.toiletSign = true;
+    G.money -= LANG.locale.envCosts.toiletSign;
+    G.discoveryCount++;
+    dayResults.push({ tag: 'discovery', text: LANG.envMessages.toiletSign });
+  }
+  if (sel.has('entranceSensor') && !G.entranceSensor) {
+    G.entranceSensor = true;
+    G.money -= LANG.locale.envCosts.entranceSensor;
+    G.discoveryCount++;
+    dayResults.push({ tag: 'discovery', text: LANG.envMessages.entranceSensor });
+  }
+
+  // --- Joy actions ---
+  if (sel.has('music')) {
+    G.mp = Math.min(G.maxMp, G.mp + 2);
+    G.musicPlayed = true;
+    G._musicBonusNextDay = true;
+    dayResults.push({ tag: 'warm', text: LANG.joyMessages.music });
+    G.emotionLog.push(LANG.joyMessages.musicEmotion);
+  }
+  if (sel.has('album')) {
+    G.mp = Math.min(G.maxMp, G.mp + 2);
+    G.albumWatched = true;
+    G.peacefulCount++;
+    dayResults.push({ tag: 'warm', text: LANG.joyMessages.album });
+    G.emotionLog.push(LANG.joyMessages.albumEmotion);
+  }
+
+  // --- Sudden events ---
+  processSuddenEvent();
+
+  // --- Pamphlet event (Day 5 or 6, once) ---
+  processPamphletEvent();
+
+  // --- Game over check ---
+  checkGameOver();
+
+  // --- Save sleep pt for night phase ---
+  G._allocSleepPt = allocState.sleepPt;
+  G.totalSleepPt += allocState.sleepPt;
+
+  // --- Render result screen ---
+  renderResult();
+}
+
+
+/* ================================================================
+   Sudden Event Processing
+   ================================================================ */
+function processSuddenEvent() {
+  // Calculate event probability
+  let eventProb = 0.30;
+  if (G._watchSkipped) eventProb += 0.20;
+  if (G.motherMood === 'uneasy') eventProb += 0.15;
+  if (G.motherMood === 'refuse') eventProb += 0.10;
+
+  if (Math.random() >= eventProb) {
+    // No sudden event — chance for peaceful moment
+    if (Math.random() < 0.20) {
+      const peaceText = LANG.peaceful[Math.floor(Math.random() * LANG.peaceful.length)];
+      G.mp = Math.min(G.maxMp, G.mp + 1);
+      G.hadPeacefulMoment = true;
+      G.peacefulCount++;
+      dayResults.push({ tag: 'warm', text: peaceText + ' メンタル+1' });
+    }
+    return;
+  }
+
+  // Build available event pool based on day
+  const pool = ['theft_delusion', 'go_home', 'fall'];
+  if (G.day >= 4) pool.push('wander');
+  if (G.day >= 5) pool.push('verbal_abuse');
+
+  const eventId = pool[Math.floor(Math.random() * pool.length)];
+  const ev = LANG.events[eventId];
+
+  // Track seen count
+  if (!G.seenEvents[eventId]) G.seenEvents[eventId] = 0;
+  const seenBefore = G.seenEvents[eventId];
+  G.seenEvents[eventId]++;
+
+  // Log emotion
+  G.emotionLog.push(ev.emotion);
+
+  // Determine display mode
+  const hasChoices = ev.choiceA && ev.choiceB;
+  const isFirstTime = seenBefore === 0;
+  const alreadyLearned = G.learnedCoping[eventId] === true;
+
+  if (alreadyLearned && hasChoices) {
+    // Auto-apply best response
+    const dmg = ev.choiceB.mp;
+    let finalMp = dmg;
+    // Entrance sensor bonus for wander
+    if (eventId === 'wander' && G.entranceSensor) finalMp = Math.max(finalMp + 1, 0);
+    G.mp = Math.max(0, G.mp + finalMp);
+    G.hp = Math.max(0, G.hp + (ev.hp || 0));
+    dayResults.push({
+      tag: 'info',
+      text: ev.text,
+      reason: ev.reason,
+      autoResponse: LANG.pamphlet.learnedAuto,
+    });
+  } else if (!isFirstTime && hasChoices) {
+    // Show reason + choices (2nd time)
+    pendingChoices++;
+    dayResults.push({
+      tag: 'bad',
+      text: ev.text,
+      reason: ev.reason,
+      eventId: eventId,
+      needsChoice: true,
+    });
+  } else {
+    // First time or no choices (fall) — apply damage directly
+    G.mp = Math.max(0, G.mp + (ev.mp || 0));
+    G.hp = Math.max(0, G.hp + (ev.hp || 0));
+    // Entrance sensor bonus for wander
+    if (eventId === 'wander' && G.entranceSensor) {
+      G.mp = Math.min(G.maxMp, G.mp + 1);
+    }
+    let resultObj = { tag: 'bad', text: ev.text };
+    if (!isFirstTime) {
+      resultObj.reason = ev.reason;
+    }
+    dayResults.push(resultObj);
+  }
+}
+
+
+/* ================================================================
+   Event Choice Handler
+   ================================================================ */
+function handleEventChoice(eventId, choice) {
+  const ev = LANG.events[eventId];
+  const choiceData = choice === 'B' ? ev.choiceB : ev.choiceA;
+
+  let finalMp = choiceData.mp;
+
+  // Entrance sensor bonus for wander + choice B
+  if (eventId === 'wander' && choice === 'B' && G.entranceSensor) {
+    finalMp = Math.max(finalMp + 1, 0);
+  }
+
+  G.mp = Math.max(0, G.mp + finalMp);
+  G.hp = Math.max(0, G.hp + (ev.hp || 0));
+
+  // If chose B and first time learning
+  if (choice === 'B' && !G.learnedCoping[eventId]) {
+    G.learnedCoping[eventId] = true;
+    G.discoveryCount++;
+  }
+
+  pendingChoices--;
+
+  // Update card UI
+  const card = document.getElementById(`event-card-${eventId}`);
+  if (card) {
+    const choicesDiv = card.querySelector('.choice-row');
+    if (choicesDiv) {
+      const cards = choicesDiv.querySelectorAll('.choice-card');
+      cards.forEach((c, i) => {
+        if ((choice === 'A' && i === 0) || (choice === 'B' && i === 1)) {
+          c.classList.add('chosen');
+        } else {
+          c.classList.add('not-chosen');
+        }
+      });
+    }
+
+    // Show result text
+    const resultDiv = document.createElement('div');
+    resultDiv.className = 'result-text';
+    resultDiv.style.marginTop = '10px';
+    if (choice === 'B' && ev.choiceB.learnMsg) {
+      resultDiv.innerHTML = `<span class="result-tag tag-discovery">発見</span><br>${nl2br(ev.choiceB.learnMsg)}`;
+    } else {
+      resultDiv.innerHTML = `<span class="result-tag tag-bad">ダメージ</span> メンタル${choiceData.mp}`;
+    }
+    card.appendChild(resultDiv);
+  }
+
+  // Update status bar in result screen
+  const statusEl = document.getElementById('result-status');
+  if (statusEl) statusEl.innerHTML = renderStatus();
+
+  // Enable the "to night" button if all choices resolved
+  checkGameOver();
+  updateToNightButton();
+}
+
+
+/* ================================================================
+   Pamphlet Event (Day 5 or 6, once)
+   ================================================================ */
+function processPamphletEvent() {
+  if (G.receivedPamphlet) return;
+  if (G.day !== 5 && G.day !== 6) return;
+  if (!(G.motherHealth <= 2 || G.hp <= 5 || G.mp <= 5)) return;
+
+  G.receivedPamphlet = true;
+  const pamphletText = t(LANG.pamphlet.text, { facility: LANG.locale.pamphletText });
+
+  pendingChoices++;
+  dayResults.push({
+    tag: 'info',
+    text: pamphletText,
+    isPamphlet: true,
+    notePrompt: LANG.pamphlet.notePrompt,
   });
+}
+
+
+/* ================================================================
+   Pamphlet Note Choice Handler
+   ================================================================ */
+function handleNoteChoice(choice) {
+  pendingChoices--;
+
+  if (choice === 'yes') {
+    G.madeBackupNote = true;
+    G.discoveryCount++;
+  }
+
+  const card = document.getElementById('event-card-pamphlet');
+  if (card) {
+    const choicesDiv = card.querySelector('.choice-row');
+    if (choicesDiv) {
+      const cards = choicesDiv.querySelectorAll('.choice-card');
+      cards.forEach((c, i) => {
+        if ((choice === 'yes' && i === 0) || (choice === 'no' && i === 1)) {
+          c.classList.add('chosen');
+        } else {
+          c.classList.add('not-chosen');
+        }
+      });
+    }
+
+    const resultDiv = document.createElement('div');
+    resultDiv.className = 'result-text';
+    resultDiv.style.marginTop = '10px';
+    const msg = choice === 'yes' ? LANG.pamphlet.noteYesMsg : LANG.pamphlet.noteNoMsg;
+    const tagClass = choice === 'yes' ? 'tag-discovery' : 'tag-info';
+    const tagLabel = choice === 'yes' ? '発見' : '';
+    resultDiv.innerHTML = tagLabel ? `<span class="result-tag ${tagClass}">${tagLabel}</span><br>${nl2br(msg)}` : nl2br(msg);
+    card.appendChild(resultDiv);
+  }
+
+  updateToNightButton();
+}
+
+
+/* ================================================================
+   Game Over Check
+   ================================================================ */
+function checkGameOver() {
+  if (G.hp <= 0 && !G.gameOver) {
+    G.gameOver = true;
+    G.gameOverReason = 'hp';
+  }
+  if (G.mp <= 0 && !G.gameOver) {
+    G.gameOver = true;
+    G.gameOverReason = 'mp';
+  }
+}
+
+
+/* ================================================================
+   Update "To Night" Button State
+   ================================================================ */
+function updateToNightButton() {
+  const btn = document.getElementById('btn-to-night');
+  if (!btn) return;
+  if (G.gameOver) {
+    btn.textContent = LANG.ui.seeResult;
+    btn.disabled = false;
+    btn.onclick = () => { console.log('エンディングへ（ステップ6で実装）'); };
+  } else if (pendingChoices <= 0) {
+    btn.disabled = false;
+  }
+}
+
+
+/* ================================================================
+   Render: Result Screen
+   ================================================================ */
+function renderResult() {
+  const screen = document.getElementById('screen-result');
+  let html = '';
+
+  // Day header
+  html += `<h2 class="day-header">${t(LANG.ui.day, { n: G.day })} — 日中の結果</h2>`;
+
+  // Status bar (will be updated dynamically)
+  html += `<div id="result-status">${renderStatus()}</div>`;
+
+  // Result cards
+  html += '<div class="result-list">';
+  for (const r of dayResults) {
+    html += renderResultCard(r);
+  }
+  html += '</div>';
+
+  // Game over display
+  if (G.gameOver) {
+    html += `<div class="gameover-overlay">
+      <div class="gameover-text">${LANG.ui.gameOver}</div>
+      <button class="btn btn-primary" onclick="console.log('エンディングへ（ステップ6で実装）')">${LANG.ui.seeResult}</button>
+    </div>`;
+  } else {
+    // To night button
+    const disabled = pendingChoices > 0 ? 'disabled' : '';
+    html += `<button class="btn btn-primary" id="btn-to-night" ${disabled} onclick="goToNight()">${LANG.ui.toNight}</button>`;
+  }
+
+  screen.innerHTML = html;
+  showScreen('screen-result');
+}
+
+
+/* ================================================================
+   Render: Single Result Card
+   ================================================================ */
+function renderResultCard(r) {
+  const tagMap = {
+    good: { cls: 'tag-good', label: '良い' },
+    bad: { cls: 'tag-bad', label: '悪い' },
+    info: { cls: 'tag-info', label: '情報' },
+    discovery: { cls: 'tag-discovery', label: '発見' },
+    warm: { cls: 'tag-warm', label: '穏やか' },
+  };
+  const tagData = tagMap[r.tag] || tagMap.info;
+
+  // Choose card id
+  let cardId = '';
+  if (r.eventId) cardId = `id="event-card-${r.eventId}"`;
+  if (r.isPamphlet) cardId = `id="event-card-pamphlet"`;
+
+  let html = `<div class="card result-card" ${cardId}>`;
+  html += `<span class="result-tag ${tagData.cls}">${tagData.label}</span>`;
+  html += `<div class="result-text">${nl2br(r.text)}</div>`;
+
+  // Reason text (2nd time events)
+  if (r.reason) {
+    html += `<div class="reason-text">💡 なぜこうなるのか：<br>${nl2br(r.reason)}</div>`;
+  }
+
+  // Auto response (learned coping)
+  if (r.autoResponse) {
+    html += `<div class="action-bonus" style="margin-top:8px;font-size:0.88rem;">${r.autoResponse}</div>`;
+  }
+
+  // Event choices
+  if (r.needsChoice) {
+    const ev = LANG.events[r.eventId];
+    html += `<div class="choice-row">
+      <div class="card choice-card" onclick="handleEventChoice('${r.eventId}','A')">
+        ${ev.choiceA.label}
+      </div>
+      <div class="card choice-card" onclick="handleEventChoice('${r.eventId}','B')">
+        ${ev.choiceB.label}
+      </div>
+    </div>`;
+  }
+
+  // Pamphlet note choices
+  if (r.isPamphlet) {
+    html += `<div class="result-text" style="margin-top:10px;">${nl2br(r.notePrompt)}</div>`;
+    html += `<div class="choice-row">
+      <div class="card choice-card" onclick="handleNoteChoice('yes')">
+        ${LANG.pamphlet.noteYes}
+      </div>
+      <div class="card choice-card" onclick="handleNoteChoice('no')">
+        ${LANG.pamphlet.noteNo}
+      </div>
+    </div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+
+/* ================================================================
+   Go to Night (placeholder for Step 5)
+   ================================================================ */
+function goToNight() {
+  console.log('夜へ進む（ステップ5で実装）');
 }
 
 
