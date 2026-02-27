@@ -2572,10 +2572,220 @@ function nextDay() {
 
 
 /* ================================================================
-   Go to Ending (placeholder for Step 6)
+   Step 6: Ending & Review Report
    ================================================================ */
 function goToEnding() {
-  console.log('エンディングへ（ステップ6で実装）');
+  const screen = document.getElementById('screen-ending');
+  let html = '';
+
+  // --- Determine ending type ---
+  let ending;
+  if (G.gameOver) {
+    ending = LANG.endings[G.gameOverReason]; // 'hp' or 'mp'
+  } else if (G.usedService >= 2) {
+    ending = LANG.endings.connected;
+  } else if (G.usedService === 1) {
+    ending = LANG.endings.firstStep;
+  } else {
+    ending = LANG.endings.alone;
+  }
+
+  // --- Title & message ---
+  html += `<h2 class="ending-title">「${ending.title}」</h2>`;
+  html += `<div class="ending-message">${nl2br(ending.message)}</div>`;
+
+  // --- Conditional extra texts ---
+  const extras = [];
+
+  // Policy-based extras
+  if (G.policy === 'solo') {
+    if (G.gameOver) {
+      extras.push(LANG.endingExtras.policySoloOver);
+    } else {
+      extras.push(LANG.endingExtras.policySoloClear);
+    }
+  }
+  if (G.policy === 'work') {
+    if (G.gameOver) {
+      extras.push(LANG.endingExtras.policyWorkOver);
+    } else {
+      extras.push(LANG.endingExtras.policyWorkClear);
+    }
+  }
+
+  // Peaceful moment
+  if (G.hadPeacefulMoment) {
+    extras.push(LANG.endingExtras.peaceful);
+  }
+
+  // Music / Album
+  if (G.musicPlayed) extras.push(LANG.endingExtras.music);
+  if (G.albumWatched) extras.push(LANG.endingExtras.album);
+
+  // Discovery count
+  if (G.discoveryCount >= 1) {
+    extras.push(t(LANG.endingExtras.discovery, { n: G.discoveryCount }));
+  }
+
+  // Coping learned
+  if (Object.keys(G.learnedCoping).length > 0) {
+    extras.push(LANG.endingExtras.coping);
+  }
+
+  // Pamphlet
+  if (G.receivedPamphlet) {
+    extras.push(LANG.endingExtras.pamphlet);
+  }
+  if (G.madeBackupNote) {
+    extras.push(LANG.endingExtras.backupNote);
+  }
+
+  // Peer support
+  if (G.foundPeerSupport) {
+    extras.push(LANG.endingExtras.peerSupport);
+  }
+
+  for (const ex of extras) {
+    html += `<div class="ending-extra">${nl2br(ex)}</div>`;
+  }
+
+  // --- Review report ---
+  html += renderReviewReport();
+
+  // --- Emotion log ---
+  html += renderEmotionSection();
+
+  // --- Social message ---
+  html += renderSocialMessage();
+
+  // --- Play again ---
+  html += `<button class="btn btn-secondary" style="margin-top:24px;" onclick="playAgain()">${LANG.ui.playAgain}</button>`;
+  html += `<div style="height:40px;"></div>`;
+
+  screen.innerHTML = html;
+  showScreen('screen-ending');
+}
+
+
+/* ================================================================
+   Render: Review Report
+   ================================================================ */
+function renderReviewReport() {
+  const rp = LANG.report;
+  let html = '';
+
+  // Title
+  html += `<div class="report-section">
+    <div class="report-title">━━━ ${rp.title7days} ━━━</div>`;
+
+  // Policy
+  if (G.policy) {
+    const polName = LANG.ui.policy[G.policy]?.name || '';
+    html += `<div class="report-row"><span>${rp.policyLabel}</span><span>「${polName}」</span></div>`;
+  }
+  html += '</div>';
+
+  // --- Sacrificed ---
+  html += `<div class="report-section">
+    <div class="report-title">【${rp.sacrificed}】</div>`;
+
+  const avgSleep = G.day > 0 ? (G.totalSleepPt / G.day).toFixed(1) : '0';
+  html += `<div class="report-row"><span>${rp.avgSleep}</span><span>${t(rp.hoursPerDay, { n: avgSleep })}</span></div>`;
+  html += `<div class="report-row"><span>${rp.skippedMeals}</span><span>${t(rp.timesUnit, { n: G.skippedMeals })}</span></div>`;
+  html += `<div class="report-row"><span>${rp.restTime}</span><span>${t(rp.hoursUnit, { n: G.restDays * 2 })}</span></div>`;
+  html += '</div>';
+
+  // --- Protected ---
+  html += `<div class="report-section">
+    <div class="report-title">【${rp.protected}】</div>`;
+  html += `<div class="report-row"><span>${rp.mealsServed}</span><span>${t(rp.mealsUnit, { n: G.mealsServed })}</span></div>`;
+  html += `<div class="report-row"><span>${rp.peacefulTimes}</span><span>${t(rp.timesUnit, { n: G.peacefulCount })}</span></div>`;
+  html += `<div class="report-row"><span>${rp.workedDays}</span><span>${t(rp.daysUnit, { n: G.workedDays })}</span></div>`;
+  html += '</div>';
+
+  // --- Discoveries ---
+  if (G.discoveryCount >= 1) {
+    html += `<div class="report-section">
+      <div class="report-title">【${rp.discoveries}】</div>
+      <ul class="discovery-list">`;
+    const items = rp.discoveryItems;
+    if (G.toiletMastered) html += `<li>${items.toiletMastered}</li>`;
+    if (G.medsMastered) html += `<li>${items.medsMastered}</li>`;
+    if (G.mealMastered) html += `<li>${items.mealMastered}</li>`;
+    if (G.nightLight) html += `<li>${items.nightLight}</li>`;
+    if (G.toiletSign) html += `<li>${items.toiletSign}</li>`;
+    if (G.entranceSensor) html += `<li>${items.entranceSensor}</li>`;
+    if (Object.keys(G.learnedCoping).length > 0) html += `<li>${items.learnedCoping}</li>`;
+    if (G.foundPeerSupport) html += `<li>${items.foundPeerSupport}</li>`;
+    if (G.madeBackupNote) html += `<li>${items.madeBackupNote}</li>`;
+    if (G.musicPlayed) html += `<li>${items.musicPlayed}</li>`;
+    if (G.albumWatched) html += `<li>${items.albumWatched}</li>`;
+    html += '</ul></div>';
+  }
+
+  // --- Stats ---
+  html += `<div class="report-section">
+    <div class="report-title">【${rp.stats}】</div>`;
+  html += `<div class="report-row"><span>${rp.serviceUsed}</span><span>${t(rp.timesUnit, { n: G.usedService })}</span></div>`;
+  html += `<div class="report-row"><span>${rp.finalMoney}</span><span>${LANG.locale.currencyFormat(G.money)}</span></div>`;
+  html += `<div class="report-row"><span>${rp.motherState}</span><span>${t(LANG.ui.careLevel, { n: G.motherCare })}（${LANG.healthLabel[G.motherHealth] || LANG.healthLabel[1]}）</span></div>`;
+  html += `<div class="report-row"><span>${rp.yourHp}</span><span>${G.hp} / ${G.maxHp}</span></div>`;
+  html += `<div class="report-row"><span>${rp.yourMp}</span><span>${G.mp} / ${G.maxMp}</span></div>`;
+  html += '</div>';
+
+  return html;
+}
+
+
+/* ================================================================
+   Render: Emotion Section
+   ================================================================ */
+function renderEmotionSection() {
+  if (G.emotionLog.length === 0) return '';
+
+  const es = LANG.emotionSection;
+  // Deduplicate
+  const unique = [...new Set(G.emotionLog)];
+
+  let html = `<div class="emotion-section">
+    <div class="report-title">━━━ ${es.title} ━━━</div>
+    <p style="font-size:0.88rem;margin-bottom:12px;">${es.intro}</p>`;
+
+  for (const em of unique) {
+    html += `<div class="emotion-item">${em}</div>`;
+  }
+
+  html += `<div class="emotion-affirm">${nl2br(es.affirm)}</div>`;
+  html += '</div>';
+  return html;
+}
+
+
+/* ================================================================
+   Render: Social Message
+   ================================================================ */
+function renderSocialMessage() {
+  const sm = LANG.locale.socialMessage;
+  let html = '<div class="social-message">';
+  html += `<p>${nl2br(sm.stats)}</p>`;
+  html += `<p style="margin-top:12px;">${nl2br(sm.cta)}</p>`;
+  html += '<div style="margin-top:12px;">';
+  for (const r of sm.resources) {
+    html += `<p>${r}</p>`;
+  }
+  html += '</div></div>';
+  return html;
+}
+
+
+/* ================================================================
+   Play Again
+   ================================================================ */
+function playAgain() {
+  initGameState();
+  selectedPolicy = '';
+  renderTitle();
+  showScreen('screen-title');
 }
 
 
