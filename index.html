@@ -728,6 +728,9 @@ h2, h3 {
   <!-- Morning Screen -->
   <div id="screen-morning" class="screen"></div>
 
+  <!-- Policy Screen -->
+  <div id="screen-policy" class="screen"></div>
+
   <!-- Allocation Screen -->
   <div id="screen-alloc" class="screen"></div>
 
@@ -780,6 +783,33 @@ const LANG = {
     overWarning: '時間が {n}pt 超過しています',
     allocExplain: '⏱ 1日 = 24時間。あなたの持ち時間です。',
     skipPenalty: 'スキップ: ',
+    workFixed: '⚠ 方針により変更不可',
+    policy: {
+      title: 'あなたの方針',
+      question: '母の介護、どう向き合いますか？',
+      locked: 'この選択は、7日間変更できません。',
+      confirm: 'この方針で始める',
+      solo: {
+        name: '全部自分でやる',
+        desc: '母のことは、自分で見たい。',
+        effect: '外部サービスは利用できない',
+        difficulty: '★★★',
+        morning1: 'ヘルパーさんには頼らない。そう決めた。',
+      },
+      service: {
+        name: '使えるものは使う',
+        desc: '頼れるところは、頼ろう。',
+        effect: '外部サービスを自由に利用できる',
+        difficulty: '★★☆',
+      },
+      work: {
+        name: '仕事は辞められない',
+        desc: '仕事を休んだら、クビになるかもしれない。',
+        effect: '毎日フルタイム勤務（8時間）が固定',
+        difficulty: '★★★★',
+        morning1: '今日も仕事がある。8時間、母のことは考えないようにする。',
+      },
+    },
   },
 
   // --- Premise ---
@@ -1018,6 +1048,10 @@ const LANG = {
     pamphlet: 'テーブルの上のパンフレットは、まだ開いていない。\nでも、選択肢があることを知っている。それだけで、少し違う。\n決断は今日ではなくていい。でも、いつか——その日のために、知っておくことに意味がある。',
     backupNote: 'あなたは対処ノートを書いた。薬の種類、好きな食べ物、落ち着く声かけ——\nそれは、あなたにしか書けない記録。もしもの時、それが母を守る。',
     peerSupport: 'あなたは一人じゃなかった。\n電話の向こうにも、同じ思いを抱えている人がいた。\n支えは、思っているより近くにある。',
+    policySoloClear: 'あなたは最初に「全部自分でやる」と決めました。\nその覚悟は本物でした。でも——もし、あの時、違う選択をしていたら？\n「もう一度遊ぶ」で、別の方針を試してみてください。',
+    policySoloOver: 'あなたは「全部自分でやる」と決めました。\nでも、一人で抱え込むことが、最善とは限りません。',
+    policyWorkClear: '仕事と介護。どちらも手放せなかった7日間。\n日本では、介護離職者が年間約10万人。\nあなたは踏みとどまった——でも、その代償は小さくなかった。',
+    policyWorkOver: 'フルタイムで働きながらの介護。\n24時間では、どうやっても足りなかった。',
   },
 
   // --- Report labels ---
@@ -1045,6 +1079,7 @@ const LANG = {
       musicPlayed: '母と音楽を聴いた',
       albumWatched: '母と写真を見た',
     },
+    policyLabel: 'あなたの方針',
     stats: '数字で見る7日間',
     serviceUsed: '外部サービス利用',
     finalMoney: '最終貯金残高',
@@ -1114,6 +1149,9 @@ function initGameState() {
     motherCare: 2,
     prevSleep: 8,
     medsSkippedYesterday: false,
+
+    // Policy
+    policy: '',  // 'solo' | 'service' | 'work'
 
     // Records
     skippedMeals: 0,
@@ -1343,6 +1381,14 @@ function renderMorning() {
     </div>`;
   }
 
+  // Policy-based Day 1 extra text
+  if (day === 1 && G.policy) {
+    const polData = LANG.ui.policy[G.policy];
+    if (polData && polData.morning1) {
+      html += `<div class="morning-text" style="border-left-color:var(--accent);"><p>${polData.morning1}</p></div>`;
+    }
+  }
+
   // Morning flavor text
   html += '<div class="morning-text">';
   const flavorText = LANG.morning[day - 1] || LANG.morning[0];
@@ -1468,6 +1514,7 @@ function calcRemaining() {
    Allocation: Toggle helpers
    ================================================================ */
 function toggleService(id) {
+  if (G.policy === 'solo') return;
   const actions = getActions();
   const svc = actions[id];
   if (!svc) return;
@@ -1490,6 +1537,8 @@ function toggleService(id) {
 }
 
 function toggleWork(id) {
+  // Work policy: cannot change
+  if (G.policy === 'work') return;
   if (allocState.workChoice === id) {
     allocState.workChoice = null;
   } else {
@@ -1562,6 +1611,8 @@ function renderAlloc(isInitial) {
   for (const group of groups) {
     // Environment: only Day 2+
     if (group.key === 'env' && day < 2) continue;
+    // Solo policy: hide service group entirely
+    if (group.key === 'service' && G.policy === 'solo') continue;
     // Joy: always show group but cards may be disabled
 
     html += `<div class="action-group">`;
@@ -1612,6 +1663,18 @@ function renderAlloc(isInitial) {
         if (isSelected) cardClass += ' selected';
         const incomeAmt = a.income;
         extraInfo = `<div class="action-detail">💰 +${LANG.locale.currencyFormat(incomeAmt)}</div>`;
+        // Work policy: fulltime forced, half disabled
+        if (G.policy === 'work') {
+          if (id === 'workFull') {
+            cardClass += ' selected';
+            isSelected = true;
+            isDisabled = true;
+            extraInfo += `<div class="action-penalty">${LANG.ui.workFixed}</div>`;
+          } else {
+            cardClass += ' disabled';
+            isDisabled = true;
+          }
+        }
       } else if (group.key === 'env') {
         isSelected = allocState.selected.has(id);
         if (isSelected) cardClass += ' selected';
@@ -1734,6 +1797,10 @@ function renderSleepCard(lang) {
    ================================================================ */
 function goToAlloc() {
   resetAllocState();
+  // Work policy: force fulltime
+  if (G.policy === 'work') {
+    allocState.workChoice = 'workFull';
+  }
   renderAlloc(true);
 }
 
@@ -2338,6 +2405,78 @@ function goToNight() {
 function startGame() {
   initGameState();
   console.log('ゲーム開始', G);
+  renderPolicy();
+}
+
+
+/* ================================================================
+   Policy Selection Screen
+   ================================================================ */
+let selectedPolicy = '';
+
+function renderPolicy() {
+  const screen = document.getElementById('screen-policy');
+  const p = LANG.ui.policy;
+  const policies = ['solo', 'service', 'work'];
+
+  let html = '';
+  html += `<h2 class="day-header">${p.title}</h2>`;
+  html += `<div class="morning-text"><p>${p.question}</p><p style="color:var(--red);font-size:0.85rem;">${p.locked}</p></div>`;
+
+  html += '<div class="action-cards" style="margin-bottom:24px;">';
+  for (const key of policies) {
+    const pol = p[key];
+    const isSelected = selectedPolicy === key;
+    const selClass = isSelected ? ' selected' : '';
+    html += `<div class="card action-card${selClass}" onclick="selectPolicy('${key}')">
+      <div class="action-card-top">
+        <span class="action-name">${pol.name}</span>
+        <span class="action-cost">${pol.difficulty}</span>
+      </div>
+      <div class="action-detail" style="font-style:italic;margin-bottom:4px;">${pol.desc}</div>
+      <div class="action-penalty">${pol.effect}</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  const disabled = selectedPolicy ? '' : 'disabled';
+  html += `<button class="btn btn-primary" id="btn-policy-confirm" ${disabled} onclick="confirmPolicy()">${p.confirm}</button>`;
+
+  screen.innerHTML = html;
+  showScreen('screen-policy');
+}
+
+function selectPolicy(key) {
+  selectedPolicy = key;
+  // Re-render without scrolling to top
+  const screen = document.getElementById('screen-policy');
+  const p = LANG.ui.policy;
+  const policies = ['solo', 'service', 'work'];
+  let html = '';
+  html += `<h2 class="day-header">${p.title}</h2>`;
+  html += `<div class="morning-text"><p>${p.question}</p><p style="color:var(--red);font-size:0.85rem;">${p.locked}</p></div>`;
+  html += '<div class="action-cards" style="margin-bottom:24px;">';
+  for (const k of policies) {
+    const pol = p[k];
+    const selClass = selectedPolicy === k ? ' selected' : '';
+    html += `<div class="card action-card${selClass}" onclick="selectPolicy('${k}')">
+      <div class="action-card-top">
+        <span class="action-name">${pol.name}</span>
+        <span class="action-cost">${pol.difficulty}</span>
+      </div>
+      <div class="action-detail" style="font-style:italic;margin-bottom:4px;">${pol.desc}</div>
+      <div class="action-penalty">${pol.effect}</div>
+    </div>`;
+  }
+  html += '</div>';
+  html += `<button class="btn btn-primary" onclick="confirmPolicy()">${p.confirm}</button>`;
+  screen.innerHTML = html;
+}
+
+function confirmPolicy() {
+  if (!selectedPolicy) return;
+  G.policy = selectedPolicy;
+  selectedPolicy = '';
   renderMorning();
 }
 
