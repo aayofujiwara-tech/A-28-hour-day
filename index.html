@@ -888,9 +888,9 @@ const LANG = {
       work: {
         name: '仕事は辞められない',
         desc: '仕事を休んだら、クビになるかもしれない。',
-        effect: '毎日フルタイム勤務（8時間）が固定',
+        effect: '毎日フルタイム勤務（通勤込み10時間）が固定',
         difficulty: '★★★★',
-        morning1: '今日も仕事がある。8時間、母のことは考えないようにする。',
+        morning1: '今日も仕事がある。通勤を含めて10時間、母のことは考えないようにする。',
       },
     },
   },
@@ -974,7 +974,7 @@ const LANG = {
     myMeal: { name: '自分の食事', skip: '体力-1', detail: '自分のご飯を食べる時間' },
     sleep: { name: '睡眠', skip: '寝不足で判断力低下', detail: '' },
     housework: { name: '家事', skip: '2日連続スキップで母の健康-1', detail: '掃除・洗濯・片付け' },
-    workFull: { name: 'フルタイム勤務', skip: '', detail: '' },
+    workFull: { name: 'フルタイム勤務（通勤込み）', skip: '', detail: '' },
     workHalf: { name: '時短勤務', skip: '', detail: '' },
     rest: { name: '休息・趣味', skip: '', detail: '自分だけの時間' },
     callFriend: { name: '友人に電話', skip: '', detail: '誰かと話す時間' },
@@ -1069,6 +1069,40 @@ const LANG = {
     dayService: '頼ろうとしたのに、頼れなかった',
     visitCare: '助けが来なかった',
   },
+
+  // --- Work trouble events (while at work) ---
+  workTrouble: {
+    events: [
+      {
+        id: 'work_call_fall',
+        text: '📱 仕事中にケアマネから電話。「お母様が転倒されたようで…大きなケガはありませんが」——何もできない。ここにいるしかない。',
+        mp: -2, motherHealth: -1,
+        emotion: '仕事中、母のそばにいられなかった罪悪感',
+      },
+      {
+        id: 'work_call_wander',
+        text: '📱 職場に近所の人から電話。「お母さん、外を歩いてたよ」——血の気が引いた。早退もできず、昼休みまで待った。',
+        mp: -2,
+        emotion: '電話を切った後、手が震えていた',
+      },
+      {
+        id: 'work_call_fire',
+        text: '📱 母から電話。「コンロが……」——慌てて電話越しに火を消させた。帰宅後、焦げた鍋を見て言葉が出なかった。',
+        mp: -3,
+        emotion: '最悪の事態が頭をよぎった',
+      },
+    ],
+    reason: '在宅介護と仕事の両立で最も辛いのは、"何かあっても駆けつけられない"という不安です。',
+    watchSafe: '今日は見守りカメラの映像を昼休みに確認した。母は静かにテレビを見ていた。',
+  },
+
+  // --- Fulltime work mental cost (MP-linked) ---
+  workMentalCost: [
+    '仕事に向かう。母を一人にする。毎朝、少しだけ胸が痛む。メンタル-1',
+    'また今日も母を置いていく。慣れたはずなのに、慣れない。メンタル-1',
+    '玄関を出る時、母が何か言った気がした。振り返れなかった。メンタル-1',
+    '仕事中も介護中も、どこにいても自分を責めている。メンタル-1',
+  ],
 
   // --- Learning messages ---
   learning: {
@@ -1607,8 +1641,8 @@ function getActions() {
     housework: { id: 'housework', group: 'life', pt: 2 },
 
     // --- Work ---
-    workFull: { id: 'workFull', group: 'work', pt: 8, income: LANG.locale.workIncome.full, exclusive: 'work' },
-    workHalf: { id: 'workHalf', group: 'work', pt: 4, income: LANG.locale.workIncome.half, exclusive: 'work' },
+    workFull: { id: 'workFull', group: 'work', pt: 10, income: LANG.locale.workIncome.full, exclusive: 'work' },
+    workHalf: { id: 'workHalf', group: 'work', pt: 5, income: LANG.locale.workIncome.half, exclusive: 'work' },
 
     // --- Recovery ---
     rest:       { id: 'rest',       group: 'recovery', pt: 2 },
@@ -2150,6 +2184,13 @@ function confirmDay() {
     G.money += LANG.locale.workIncome.full;
     G.workedDays++;
     dayResults.push({ tag: 'info', text: `フルタイム勤務。+${LANG.locale.currencyFormat(LANG.locale.workIncome.full)}` });
+
+    // Fulltime mental cost: MP-1
+    G.mp = Math.max(0, G.mp - 1);
+    dayResults.push({ tag: 'bad', text: toneText(LANG.workMentalCost) });
+
+    // Work trouble event (separate from regular sudden events)
+    processWorkTroubleEvent();
   } else if (allocState.workChoice === 'workHalf') {
     G.money += LANG.locale.workIncome.half;
     G.workedDays++;
@@ -2312,6 +2353,55 @@ function processSuddenEvent() {
     }
     dayResults.push(resultObj);
   }
+}
+
+
+/* ================================================================
+   Work Trouble Event (while at fulltime work)
+   ================================================================ */
+function processWorkTroubleEvent() {
+  // Base probability
+  let troubleProb = G.day >= 5 ? 0.35 : 0.25;
+  if (G._watchSkipped) troubleProb += 0.15;
+  if (G.motherMood === 'uneasy') troubleProb += 0.10;
+  if (G.motherMood === 'refuse') troubleProb += 0.10;
+
+  // Watch halves the probability
+  const watchDone = !G._watchSkipped;
+  if (watchDone) troubleProb /= 2;
+
+  if (Math.random() >= troubleProb) {
+    // No trouble — if watch was done, show safe message
+    if (watchDone) {
+      dayResults.push({ tag: 'info', text: LANG.workTrouble.watchSafe });
+    }
+    return;
+  }
+
+  // Pick a random work trouble event
+  const pool = LANG.workTrouble.events;
+  const ev = pool[Math.floor(Math.random() * pool.length)];
+
+  // Track seen count for reason display
+  if (!G.seenEvents[ev.id]) G.seenEvents[ev.id] = 0;
+  const seenBefore = G.seenEvents[ev.id];
+  G.seenEvents[ev.id]++;
+
+  // Apply damage
+  G.mp = Math.max(0, G.mp + ev.mp);
+  if (ev.motherHealth) {
+    G.motherHealth = Math.max(0, G.motherHealth + ev.motherHealth);
+  }
+
+  // Emotion log
+  G.emotionLog.push(ev.emotion);
+
+  // Build result card
+  let resultObj = { tag: 'bad', text: ev.text };
+  if (seenBefore > 0) {
+    resultObj.reason = LANG.workTrouble.reason;
+  }
+  dayResults.push(resultObj);
 }
 
 
