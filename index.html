@@ -1363,10 +1363,374 @@ function renderMorning() {
 
 
 /* ================================================================
-   Go to Allocation (placeholder for Step 3)
+   Allocation: State
+   ================================================================ */
+let allocState = {
+  selected: new Set(),     // Set of selected action ids
+  freedActions: new Set(), // Actions freed by services
+  sleepPt: 6,              // Sleep slider value
+  workChoice: null,        // 'workFull' | 'workHalf' | null
+};
+
+function resetAllocState() {
+  allocState = {
+    selected: new Set(),
+    freedActions: new Set(),
+    sleepPt: 6,
+    workChoice: null,
+  };
+}
+
+
+/* ================================================================
+   Allocation: Get action definitions
+   ================================================================ */
+function getActions() {
+  const isRefuse = G.motherMood === 'refuse';
+  const refuseExtra = isRefuse ? 1 : 0;
+
+  // Base toilet cost, reduced by mastery
+  const toiletCost = G.toiletMastered ? 1 : (2 + refuseExtra);
+  // Base meds cost, reduced by mastery
+  const medsCost = G.medsMastered ? 0 : (1 + refuseExtra);
+
+  return {
+    // --- External Services ---
+    dayService: {
+      id: 'dayService', group: 'service', pt: 0,
+      cost: -LANG.locale.services.dayService.cost,
+      frees: ['meal_m', 'meal_l', 'meal_e', 'toilet', 'watch'],
+    },
+    visitCare: {
+      id: 'visitCare', group: 'service', pt: 0,
+      cost: -LANG.locale.services.visitCare.cost,
+      frees: ['toilet'],
+    },
+
+    // --- Care ---
+    meal_m: { id: 'meal_m', group: 'care', pt: 2 + refuseExtra },
+    meal_l: { id: 'meal_l', group: 'care', pt: 2 + refuseExtra },
+    meal_e: { id: 'meal_e', group: 'care', pt: 2 + refuseExtra },
+    toilet: { id: 'toilet', group: 'care', pt: toiletCost },
+    meds:   { id: 'meds',   group: 'care', pt: medsCost },
+    watch:  { id: 'watch',  group: 'care', pt: 1 + refuseExtra },
+
+    // --- Life ---
+    myMeal:    { id: 'myMeal',    group: 'life', pt: 1 },
+    sleep:     { id: 'sleep',     group: 'life', pt: 0, isSleep: true },
+    housework: { id: 'housework', group: 'life', pt: 2 },
+
+    // --- Work ---
+    workFull: { id: 'workFull', group: 'work', pt: 8, income: LANG.locale.workIncome.full, exclusive: 'work' },
+    workHalf: { id: 'workHalf', group: 'work', pt: 4, income: LANG.locale.workIncome.half, exclusive: 'work' },
+
+    // --- Recovery ---
+    rest:       { id: 'rest',       group: 'recovery', pt: 2 },
+    callFriend: { id: 'callFriend', group: 'recovery', pt: 1 },
+
+    // --- Environment (Day 2+, one-time) ---
+    nightLight:     { id: 'nightLight',     group: 'env', pt: 1, cost: -LANG.locale.envCosts.nightLight },
+    toiletSign:     { id: 'toiletSign',     group: 'env', pt: 1, cost: -LANG.locale.envCosts.toiletSign },
+    entranceSensor: { id: 'entranceSensor', group: 'env', pt: 1, cost: -LANG.locale.envCosts.entranceSensor },
+
+    // --- Joy (calm mother only) ---
+    music: { id: 'music', group: 'joy', pt: 1 },
+    album: { id: 'album', group: 'joy', pt: 1 },
+  };
+}
+
+
+/* ================================================================
+   Allocation: Calculate remaining points
+   ================================================================ */
+function calcRemaining() {
+  const actions = getActions();
+  let used = allocState.sleepPt;
+  for (const id of allocState.selected) {
+    if (allocState.freedActions.has(id)) continue;
+    const a = actions[id];
+    if (a) used += a.pt;
+  }
+  if (allocState.workChoice) {
+    used += actions[allocState.workChoice].pt;
+  }
+  return 24 - used;
+}
+
+
+/* ================================================================
+   Allocation: Toggle helpers
+   ================================================================ */
+function toggleService(id) {
+  const actions = getActions();
+  const svc = actions[id];
+  if (!svc) return;
+
+  if (allocState.selected.has(id)) {
+    allocState.selected.delete(id);
+    // Un-free actions
+    if (svc.frees) {
+      svc.frees.forEach(fid => allocState.freedActions.delete(fid));
+    }
+  } else {
+    // Check money
+    if (svc.cost && G.money + svc.cost < 0) return;
+    allocState.selected.add(id);
+    if (svc.frees) {
+      svc.frees.forEach(fid => allocState.freedActions.add(fid));
+    }
+  }
+  renderAlloc();
+}
+
+function toggleWork(id) {
+  if (allocState.workChoice === id) {
+    allocState.workChoice = null;
+  } else {
+    allocState.workChoice = id;
+  }
+  renderAlloc();
+}
+
+function toggleAction(id) {
+  if (allocState.selected.has(id)) {
+    allocState.selected.delete(id);
+  } else {
+    allocState.selected.add(id);
+  }
+  renderAlloc();
+}
+
+function setSleep(val) {
+  allocState.sleepPt = parseInt(val, 10);
+  renderAlloc();
+}
+
+
+/* ================================================================
+   Allocation: Render
+   ================================================================ */
+function renderAlloc() {
+  const screen = document.getElementById('screen-alloc');
+  const actions = getActions();
+  const remaining = calcRemaining();
+  const day = G.day;
+
+  let html = '';
+
+  // Day header
+  html += `<h2 class="day-header">${t(LANG.ui.day, { n: day })}</h2>`;
+
+  // Status bar
+  html += renderStatus();
+
+  // Remaining points header
+  const overClass = remaining < 0 ? ' over' : '';
+  html += `<div class="alloc-header">
+    <span class="remaining-pt${overClass}">${t(LANG.ui.remaining, { n: remaining })}</span>
+  </div>`;
+
+  if (remaining < 0) {
+    html += `<div class="sleep-warning" style="margin-bottom:12px;">${t(LANG.ui.overWarning, { n: Math.abs(remaining) })}</div>`;
+  }
+
+  // --- Group order: service -> care -> life -> work -> recovery -> env -> joy ---
+  const groups = [
+    { key: 'service', ids: ['dayService', 'visitCare'] },
+    { key: 'care',    ids: ['meal_m', 'meal_l', 'meal_e', 'toilet', 'meds', 'watch'] },
+    { key: 'life',    ids: ['myMeal', 'sleep', 'housework'] },
+    { key: 'work',    ids: ['workFull', 'workHalf'] },
+    { key: 'recovery', ids: ['rest', 'callFriend'] },
+    { key: 'env',     ids: ['nightLight', 'toiletSign', 'entranceSensor'] },
+    { key: 'joy',     ids: ['music', 'album'] },
+  ];
+
+  for (const group of groups) {
+    // Environment: only Day 2+
+    if (group.key === 'env' && day < 2) continue;
+    // Joy: always show group but cards may be disabled
+
+    html += `<div class="action-group">`;
+    html += `<div class="action-group-title">${LANG.actionGroups[group.key]}</div>`;
+    html += `<div class="action-cards">`;
+
+    for (const id of group.ids) {
+      const a = actions[id];
+      if (!a) continue;
+      const lang = LANG.actions[id];
+
+      // Environment: already installed
+      if (group.key === 'env' && G[id] === true) {
+        html += `<div class="card action-card completed env">
+          <div class="action-card-top">
+            <span class="action-name">${lang.name}</span>
+          </div>
+        </div>`;
+        continue;
+      }
+
+      // Sleep: special slider card
+      if (a.isSleep) {
+        html += renderSleepCard(lang);
+        continue;
+      }
+
+      // Determine card state
+      let cardClass = 'card action-card';
+      let isSelected = false;
+      let isFreed = allocState.freedActions.has(id);
+      let isDisabled = false;
+      let extraInfo = '';
+
+      if (group.key === 'service') {
+        isSelected = allocState.selected.has(id);
+        if (isSelected) cardClass += ' selected';
+        // Show cost
+        const svcCost = Math.abs(a.cost);
+        extraInfo = `<div class="action-detail">💰 -${LANG.locale.currencyFormat(svcCost)}</div>`;
+        // Disable if not enough money
+        if (!isSelected && G.money < svcCost) {
+          cardClass += ' disabled';
+          isDisabled = true;
+        }
+      } else if (group.key === 'work') {
+        isSelected = allocState.workChoice === id;
+        if (isSelected) cardClass += ' selected';
+        const incomeAmt = a.income;
+        extraInfo = `<div class="action-detail">💰 +${LANG.locale.currencyFormat(incomeAmt)}</div>`;
+      } else if (group.key === 'env') {
+        isSelected = allocState.selected.has(id);
+        if (isSelected) cardClass += ' selected';
+        cardClass += ' env';
+        const envCost = a.cost ? Math.abs(a.cost) : 0;
+        extraInfo = '';
+        if (envCost > 0) {
+          extraInfo += `<div class="action-detail">💰 -${LANG.locale.currencyFormat(envCost)}</div>`;
+        } else {
+          extraInfo += `<div class="action-detail">💰 ${LANG.locale.currencyFormat(0)}</div>`;
+        }
+        extraInfo += `<div class="action-bonus">${LANG.ui.envHint}</div>`;
+        // Disable if not enough money
+        if (!isSelected && envCost > 0 && G.money < envCost) {
+          cardClass += ' disabled';
+          isDisabled = true;
+        }
+      } else if (group.key === 'joy') {
+        isSelected = allocState.selected.has(id);
+        if (isSelected) cardClass += ' selected';
+        cardClass += ' joy';
+        // Disable if mother not calm
+        if (G.motherMood !== 'good') {
+          cardClass += ' disabled';
+          isDisabled = true;
+          extraInfo = `<div class="action-penalty">${LANG.ui.joyUnavailable}</div>`;
+        }
+      } else {
+        // Regular care/life/recovery actions
+        isSelected = allocState.selected.has(id);
+        if (isSelected) cardClass += ' selected';
+        if (isFreed) {
+          // Show freed state
+          extraInfo = `<div class="action-freed">${LANG.ui.freed}</div>`;
+        }
+      }
+
+      // Mastery indicators
+      if (id === 'toilet' && G.toiletMastered) {
+        extraInfo += `<div class="action-bonus">${LANG.ui.masteredToilet}</div>`;
+      }
+      if (id === 'meds' && G.medsMastered) {
+        extraInfo += `<div class="action-bonus">${LANG.ui.masteredMeds}</div>`;
+      }
+
+      // Build onclick
+      let onclick = '';
+      if (!isDisabled) {
+        if (group.key === 'service') {
+          onclick = `onclick="toggleService('${id}')"`;
+        } else if (group.key === 'work') {
+          onclick = `onclick="toggleWork('${id}')"`;
+        } else {
+          onclick = `onclick="toggleAction('${id}')"`;
+        }
+      }
+
+      // Cost display
+      const ptCost = isFreed ? 0 : a.pt;
+      const costText = t(LANG.ui.costUnit, { n: ptCost });
+
+      // Skip penalty
+      let penaltyHtml = '';
+      if (lang.skip && !isFreed && group.key !== 'service' && group.key !== 'work' && group.key !== 'env' && group.key !== 'joy') {
+        penaltyHtml = `<div class="action-penalty">${LANG.ui.skipPenalty}${lang.skip}</div>`;
+      }
+
+      // Detail text
+      let detailHtml = '';
+      if (lang.detail && group.key !== 'joy') {
+        detailHtml = `<div class="action-detail">${lang.detail}</div>`;
+      }
+
+      html += `<div class="${cardClass}" ${onclick}>
+        <div class="action-card-top">
+          <span class="action-name">${lang.name}</span>
+          <span class="action-cost">${costText}</span>
+        </div>
+        ${detailHtml}
+        ${extraInfo}
+        ${!isSelected ? penaltyHtml : ''}
+      </div>`;
+    }
+
+    html += `</div></div>`;
+  }
+
+  // Confirm button
+  const canConfirm = remaining >= 0;
+  html += `<button class="btn btn-primary" ${canConfirm ? '' : 'disabled'} onclick="confirmDay()">${LANG.ui.startDay}</button>`;
+
+  screen.innerHTML = html;
+  showScreen('screen-alloc');
+}
+
+function renderSleepCard(lang) {
+  return `<div class="card action-card sleep-card">
+    <div class="action-card-top">
+      <span class="action-name">${lang.name}</span>
+      <span class="action-cost">${t(LANG.ui.costUnit, { n: allocState.sleepPt })}</span>
+    </div>
+    <div class="sleep-slider-wrap">
+      <input type="range" class="sleep-slider" min="0" max="6" value="${allocState.sleepPt}"
+        oninput="setSleep(this.value)">
+      <div class="sleep-value">${t(LANG.ui.sleepPt, { n: allocState.sleepPt })}</div>
+    </div>
+    ${allocState.sleepPt <= 2 ? `<div class="action-penalty">${lang.skip}</div>` : ''}
+  </div>`;
+}
+
+
+/* ================================================================
+   Go to Allocation Screen
    ================================================================ */
 function goToAlloc() {
-  console.log('配分画面へ遷移（ステップ3で実装）');
+  resetAllocState();
+  renderAlloc();
+}
+
+
+/* ================================================================
+   Confirm Day (placeholder for Step 4)
+   ================================================================ */
+function confirmDay() {
+  const remaining = calcRemaining();
+  if (remaining < 0) return;
+  console.log('1日を始める（ステップ4で実装）', {
+    selected: [...allocState.selected],
+    freedActions: [...allocState.freedActions],
+    sleepPt: allocState.sleepPt,
+    workChoice: allocState.workChoice,
+    remaining,
+  });
 }
 
 
