@@ -1194,13 +1194,189 @@ function renderTitle() {
 
 
 /* ================================================================
+   Utility: Text template
+   ================================================================ */
+function t(template, replacements) {
+  let s = template;
+  for (const [key, val] of Object.entries(replacements)) {
+    s = s.replace(new RegExp('\\{' + key + '\\}', 'g'), val);
+  }
+  return s;
+}
+
+/** Convert \n in text to <br> for HTML rendering */
+function nl2br(text) {
+  return text.replace(/\n/g, '<br>');
+}
+
+
+/* ================================================================
+   Render: Status Bar
+   ================================================================ */
+function renderStatus() {
+  const hpPct = Math.max(0, (G.hp / G.maxHp) * 100);
+  const mpPct = Math.max(0, (G.mp / G.maxMp) * 100);
+  const hpDanger = G.hp <= 3 ? ' danger' : '';
+  const mpDanger = G.mp <= 3 ? ' danger' : '';
+  const moneyDanger = G.money <= 10000 ? ' danger' : '';
+
+  return `
+    <div class="status-bar">
+      <div class="stat-item">
+        <div class="stat-label">💪 ${LANG.ui.statusHp}</div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill hp${hpDanger}" style="width:${hpPct}%"></div>
+        </div>
+        <div class="stat-value">${G.hp} / ${G.maxHp}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">🧠 ${LANG.ui.statusMp}</div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill mp${mpDanger}" style="width:${mpPct}%"></div>
+        </div>
+        <div class="stat-value">${G.mp} / ${G.maxMp}</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">💰 ${LANG.ui.statusMoney}</div>
+        <div class="stat-money${moneyDanger}">${LANG.locale.currencyFormat(G.money)}</div>
+      </div>
+      <div class="stat-item">
+        ${renderMotherPanel()}
+      </div>
+    </div>`;
+}
+
+
+/* ================================================================
+   Render: Mother Status Panel
+   ================================================================ */
+function renderMotherPanel() {
+  const moodData = LANG.mood[G.motherMood];
+  const healthText = LANG.healthLabel[G.motherHealth] || LANG.healthLabel[1];
+  const careText = t(LANG.ui.careLevel, { n: G.motherCare });
+
+  return `
+    <div class="mother-title">${LANG.ui.motherLabel}</div>
+    <div class="mother-info">
+      <span>${careText}</span>
+      <span>${moodData.icon} ${moodData.label}</span>
+      <span>${healthText}</span>
+    </div>`;
+}
+
+
+/* ================================================================
+   Morning: Determine Mother's Mood
+   ================================================================ */
+function determineMotherMood() {
+  const day = G.day;
+  const rand = Math.random() * 100;
+
+  // Uneasy probability
+  let uneasyCap = 15 + (day - 1) * 7;
+  if (G.medsSkippedYesterday) uneasyCap += 15;
+
+  // Refuse probability
+  let refuseCap = 0;
+  if (day >= 5) refuseCap = 15;
+  else if (day >= 3) refuseCap = 8;
+
+  // Good (calm) probability
+  let goodCap = 12;
+  // Meal mastery bonus
+  if (G.mealMastered) goodCap += 10;
+
+  // Music bonus from previous day (tracked via a temp flag)
+  if (G._musicBonusNextDay) {
+    goodCap += 20;
+    G._musicBonusNextDay = false;
+  }
+
+  // Roll: refuse -> uneasy -> good -> normal
+  if (rand < refuseCap) {
+    G.motherMood = 'refuse';
+  } else if (rand < refuseCap + uneasyCap) {
+    G.motherMood = 'uneasy';
+  } else if (rand < refuseCap + uneasyCap + goodCap) {
+    G.motherMood = 'good';
+  } else {
+    G.motherMood = 'normal';
+  }
+}
+
+
+/* ================================================================
+   Render: Morning Screen
+   ================================================================ */
+function renderMorning() {
+  determineMotherMood();
+
+  const day = G.day;
+  const screen = document.getElementById('screen-morning');
+  let html = '';
+
+  // Day header
+  html += `<h2 class="day-header">${t(LANG.ui.day, { n: day })}</h2>`;
+
+  // Status bar
+  html += renderStatus();
+
+  // Sleep warning (from previous night, Day 2+)
+  if (day > 1) {
+    if (G.prevSleep <= 1) {
+      html += `<div class="sleep-warning">${LANG.sleepWarning.severe}</div>`;
+    } else if (G.prevSleep <= 3) {
+      html += `<div class="sleep-warning">${LANG.sleepWarning.moderate}</div>`;
+    }
+  }
+
+  // Meal mastery morning message
+  if (G.mealMastered) {
+    html += `<div class="card" style="background:var(--green-light);border-color:var(--green);cursor:default;margin-bottom:16px;">
+      <div class="action-bonus" style="font-size:0.9rem;">🍚 ${LANG.ui.masteredMeal}</div>
+    </div>`;
+  }
+
+  // Morning flavor text
+  html += '<div class="morning-text">';
+  const flavorText = LANG.morning[day - 1] || LANG.morning[0];
+  flavorText.split('\n').forEach(line => {
+    html += `<p>${line}</p>`;
+  });
+  html += '</div>';
+
+  // Fixed events for Day 3, Day 5
+  if (LANG.morningFixed[day]) {
+    html += '<div class="morning-text" style="border-left-color:var(--yellow);">';
+    LANG.morningFixed[day].split('\n').forEach(line => {
+      html += `<p>${line}</p>`;
+    });
+    html += '</div>';
+  }
+
+  // Button to go to allocation
+  html += `<button class="btn btn-primary" onclick="goToAlloc()">${LANG.ui.allocTitle}</button>`;
+
+  screen.innerHTML = html;
+  showScreen('screen-morning');
+}
+
+
+/* ================================================================
+   Go to Allocation (placeholder for Step 3)
+   ================================================================ */
+function goToAlloc() {
+  console.log('配分画面へ遷移（ステップ3で実装）');
+}
+
+
+/* ================================================================
    Start Game
    ================================================================ */
 function startGame() {
   initGameState();
   console.log('ゲーム開始', G);
-  // Will navigate to morning screen in later steps
-  // For now, just log
+  renderMorning();
 }
 
 
