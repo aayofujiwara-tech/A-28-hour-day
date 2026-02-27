@@ -409,9 +409,14 @@ h2, h3 {
 }
 
 .action-cost {
-  font-size: 0.85rem;
-  color: var(--text-light);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
   white-space: nowrap;
+}
+
+.card.selected .action-cost {
+  color: var(--accent);
 }
 
 .action-detail {
@@ -764,7 +769,7 @@ const LANG = {
     careLevel: '要介護{n}',
     sleepPt: '{n} 時間',
     ptUnit: '{n}pt',
-    costUnit: '⏱ {n}pt',
+    costUnit: '{n}時間',
     freed: '✨ サービスで免除',
     masteredToilet: '✨ コツをつかんだ！',
     masteredMeds: '✨ ルーティン確立！',
@@ -773,6 +778,7 @@ const LANG = {
     joyUnavailable: '今日は難しそう…',
     installed: '✅ 設置済み',
     overWarning: '時間が {n}pt 超過しています',
+    allocExplain: '⏱ 1日 = 24時間。あなたの持ち時間です。',
     skipPenalty: 'スキップ: ',
   },
 
@@ -1510,11 +1516,14 @@ function setSleep(val) {
 /* ================================================================
    Allocation: Render
    ================================================================ */
-function renderAlloc() {
+function renderAlloc(isInitial) {
   const screen = document.getElementById('screen-alloc');
   const actions = getActions();
   const remaining = calcRemaining();
   const day = G.day;
+
+  // Save scroll position before re-render
+  const scrollY = isInitial ? 0 : window.scrollY;
 
   let html = '';
 
@@ -1523,6 +1532,11 @@ function renderAlloc() {
 
   // Status bar
   html += renderStatus();
+
+  // Day 1: explain that points = hours
+  if (day === 1) {
+    html += `<div style="text-align:center;font-size:0.82rem;color:var(--text-light);margin-bottom:4px;">${LANG.ui.allocExplain}</div>`;
+  }
 
   // Remaining points header
   const overClass = remaining < 0 ? ' over' : '';
@@ -1690,7 +1704,13 @@ function renderAlloc() {
   html += `<button class="btn btn-primary" ${canConfirm ? '' : 'disabled'} onclick="confirmDay()">${LANG.ui.startDay}</button>`;
 
   screen.innerHTML = html;
-  showScreen('screen-alloc');
+
+  if (isInitial) {
+    showScreen('screen-alloc');
+  } else {
+    // Restore scroll position after re-render (card toggle)
+    window.scrollTo(0, scrollY);
+  }
 }
 
 function renderSleepCard(lang) {
@@ -1714,7 +1734,7 @@ function renderSleepCard(lang) {
    ================================================================ */
 function goToAlloc() {
   resetAllocState();
-  renderAlloc();
+  renderAlloc(true);
 }
 
 
