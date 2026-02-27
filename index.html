@@ -963,6 +963,7 @@ const LANG = {
 
   // --- Sleep result labels ---
   sleepResult: {
+    great: 'しっかり眠れた。体も心も少し回復した。',
     good: '十分な睡眠がとれた。',
     light: '少し寝不足だが、なんとかなる。',
     bad: '寝不足だ。頭がぼんやりする。',
@@ -2284,7 +2285,7 @@ function updateToNightButton() {
   if (G.gameOver) {
     btn.textContent = LANG.ui.seeResult;
     btn.disabled = false;
-    btn.onclick = () => { console.log('エンディングへ（ステップ6で実装）'); };
+    btn.onclick = () => { goToEnding(); };
   } else if (pendingChoices <= 0) {
     btn.disabled = false;
   }
@@ -2315,7 +2316,7 @@ function renderResult() {
   if (G.gameOver) {
     html += `<div class="gameover-overlay">
       <div class="gameover-text">${LANG.ui.gameOver}</div>
-      <button class="btn btn-primary" onclick="console.log('エンディングへ（ステップ6で実装）')">${LANG.ui.seeResult}</button>
+      <button class="btn btn-primary" onclick="goToEnding()">${LANG.ui.seeResult}</button>
     </div>`;
   } else {
     // To night button
@@ -2392,10 +2393,189 @@ function renderResultCard(r) {
 
 
 /* ================================================================
-   Go to Night (placeholder for Step 5)
+   Step 5: Night Phase
    ================================================================ */
 function goToNight() {
-  console.log('夜へ進む（ステップ5で実装）');
+  const allocSleep = G._allocSleepPt || 0;
+  let actualSleep = allocSleep;
+  let nightResults = [];
+
+  // --- Night event probability ---
+  let nightEventProb = 0.40;
+  if (G.motherMood === 'uneasy') nightEventProb += 0.20;
+  if (G.medsSkippedYesterday) nightEventProb += 0.15;
+  // Day 4-5 bump
+  if (G.day >= 4) nightEventProb = Math.max(nightEventProb, 0.50);
+
+  if (Math.random() < nightEventProb) {
+    // Pick a night event
+    const nightPool = buildNightEventPool();
+    const ev = nightPool[Math.floor(Math.random() * nightPool.length)];
+
+    let sleepLoss = ev.sleepLoss;
+    let mpLoss = ev.mpLoss || 0;
+    let text = ev.text;
+
+    // Environment mitigation
+    if (ev.type === 'toiletCall1' && G.nightLight) {
+      sleepLoss = 0;
+      text = LANG.nightEvents.toiletCall1NightLight;
+    } else if (ev.type === 'toiletCall3' && G.nightLight) {
+      sleepLoss = Math.max(sleepLoss - 1, 0);
+      text = LANG.nightEvents.toiletCall3NightLight;
+    } else if (ev.type === 'nightWander' && G.entranceSensor) {
+      sleepLoss = 2;
+      text += ' ' + LANG.nightEvents.nightWanderSensor;
+    }
+
+    actualSleep = Math.max(0, actualSleep - sleepLoss);
+    G.mp = Math.max(0, G.mp - mpLoss);
+
+    nightResults.push({ tag: 'bad', text: text });
+
+    // Emotion log
+    if (ev.type === 'nightWander') {
+      G.emotionLog.push(LANG.nightEmotions.wanderNight);
+    }
+  }
+
+  // Emotion log for very poor sleep
+  if (actualSleep <= 2) {
+    G.emotionLog.push(LANG.nightEmotions.sleepless);
+  }
+
+  // --- Sleep recovery table ---
+  let hpRecovery = 0;
+  let mpRecovery = 0;
+  let sleepLabel = '';
+
+  if (actualSleep >= 7) {
+    hpRecovery = 3;
+    mpRecovery = 1;
+    sleepLabel = LANG.sleepResult.great;
+  } else if (actualSleep >= 6) {
+    hpRecovery = 2;
+    sleepLabel = LANG.sleepResult.good;
+  } else if (actualSleep >= 4) {
+    hpRecovery = 1;
+    sleepLabel = LANG.sleepResult.light;
+  } else if (actualSleep >= 2) {
+    hpRecovery = 0;
+    sleepLabel = LANG.sleepResult.bad;
+  } else {
+    hpRecovery = -1;
+    mpRecovery = -1;
+    sleepLabel = LANG.sleepResult.severe;
+  }
+
+  G.hp = Math.max(0, Math.min(G.maxHp, G.hp + hpRecovery));
+  G.mp = Math.max(0, Math.min(G.maxMp, G.mp + mpRecovery));
+
+  // Disrupted sleep text
+  if (actualSleep < allocSleep) {
+    nightResults.push({
+      tag: 'info',
+      text: t(LANG.sleepResult.disrupted, { n: allocSleep, m: actualSleep }),
+    });
+  }
+
+  // Recovery result
+  const recovTag = hpRecovery > 0 ? 'good' : (hpRecovery < 0 ? 'bad' : 'info');
+  let recovText = sleepLabel;
+  if (hpRecovery !== 0) recovText += ` 体力${hpRecovery > 0 ? '+' : ''}${hpRecovery}`;
+  if (mpRecovery !== 0) recovText += ` メンタル${mpRecovery > 0 ? '+' : ''}${mpRecovery}`;
+  nightResults.push({ tag: recovTag, text: recovText });
+
+  // --- Update prevSleep ---
+  G.prevSleep = actualSleep;
+
+  // --- Game over check ---
+  checkGameOver();
+
+  // --- Render night screen ---
+  renderNight(allocSleep, actualSleep, nightResults);
+}
+
+
+/* ================================================================
+   Build Night Event Pool
+   ================================================================ */
+function buildNightEventPool() {
+  const pool = [
+    { type: 'toiletCall1', text: LANG.nightEvents.toiletCall1, sleepLoss: 1, mpLoss: 0 },
+    { type: 'toiletCall3', text: LANG.nightEvents.toiletCall3, sleepLoss: 3, mpLoss: 0 },
+    { type: 'nightScream', text: LANG.nightEvents.nightScream, sleepLoss: 2, mpLoss: 1 },
+  ];
+  // Deep night wander available from Day 3+
+  if (G.day >= 3) {
+    pool.push({ type: 'nightWander', text: LANG.nightEvents.nightWander, sleepLoss: 4, mpLoss: 1 });
+  }
+  return pool;
+}
+
+
+/* ================================================================
+   Render: Night Screen
+   ================================================================ */
+function renderNight(allocSleep, actualSleep, nightResults) {
+  const screen = document.getElementById('screen-night');
+  let html = '';
+
+  // Header
+  html += `<h2 class="night-header">🌙 ${LANG.ui.night}</h2>`;
+
+  // Status bar
+  html += renderStatus();
+
+  // Allocated sleep display
+  html += `<div class="morning-text" style="border-left-color:var(--blue);">
+    <p>配分した睡眠時間：${allocSleep}時間</p>
+    <p>実質睡眠時間：${actualSleep}時間</p>
+  </div>`;
+
+  // Night result cards
+  html += '<div class="result-list">';
+  for (const r of nightResults) {
+    html += renderResultCard(r);
+  }
+  html += '</div>';
+
+  // Game over or next day
+  if (G.gameOver) {
+    html += `<div class="gameover-overlay">
+      <div class="gameover-text">${LANG.ui.gameOver}</div>
+      <button class="btn btn-primary" onclick="goToEnding()">${LANG.ui.seeResult}</button>
+    </div>`;
+  } else if (G.day >= G.maxDays) {
+    html += `<button class="btn btn-primary" onclick="goToEnding()">7日間の結果を見る</button>`;
+  } else {
+    html += `<button class="btn btn-primary" onclick="nextDay()">${LANG.ui.nextDay}</button>`;
+  }
+
+  screen.innerHTML = html;
+  showScreen('screen-night');
+}
+
+
+/* ================================================================
+   Next Day
+   ================================================================ */
+function nextDay() {
+  G.day++;
+
+  // Day difficulty scaling
+  // Day 4-5: toilet cost +1 if motherHealth <= 1
+  // Day 6-7: handled by existing probability increases in determineMotherMood
+
+  renderMorning();
+}
+
+
+/* ================================================================
+   Go to Ending (placeholder for Step 6)
+   ================================================================ */
+function goToEnding() {
+  console.log('エンディングへ（ステップ6で実装）');
 }
 
 
