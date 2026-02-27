@@ -1112,7 +1112,7 @@ function initGameState() {
     motherHealth: 3,
     motherMood: 'normal',
     motherCare: 2,
-    prevSleep: 6,
+    prevSleep: 8,
     medsSkippedYesterday: false,
 
     // Records
@@ -1374,7 +1374,7 @@ function renderMorning() {
 let allocState = {
   selected: new Set(),     // Set of selected action ids
   freedActions: new Set(), // Actions freed by services
-  sleepPt: 6,              // Sleep slider value
+  sleepPt: 8,              // Sleep slider value
   workChoice: null,        // 'workFull' | 'workHalf' | null
 };
 
@@ -1382,7 +1382,7 @@ function resetAllocState() {
   allocState = {
     selected: new Set(),
     freedActions: new Set(),
-    sleepPt: 6,
+    sleepPt: 8,
     workChoice: null,
   };
 }
@@ -1720,7 +1720,7 @@ function renderSleepCard(lang) {
       <span class="action-cost">${t(LANG.ui.costUnit, { n: allocState.sleepPt })}</span>
     </div>
     <div class="sleep-slider-wrap">
-      <input type="range" class="sleep-slider" min="0" max="6" value="${allocState.sleepPt}"
+      <input type="range" class="sleep-slider" min="0" max="8" value="${allocState.sleepPt}"
         oninput="setSleep(this.value)">
       <div class="sleep-value">${t(LANG.ui.sleepPt, { n: allocState.sleepPt })}</div>
     </div>
