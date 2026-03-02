@@ -900,6 +900,9 @@ const LANG = {
     lines: [
       'あなたは40代の会社員。',
       '認知症が進み始めた母（78歳・要介護2）と二人暮らし。',
+      '在宅介護を始めて、もう3週間になる。',
+      '少しずつ、体と心が削れてきている——',
+      '',
       '1日は24時間。',
       'でも、介護と仕事と生活を回すには、どう計算しても時間が足りない。',
     ],
@@ -925,7 +928,7 @@ const LANG = {
   // --- Morning Flavor Text (7 days) ---
   morning: [
     // Day 1
-    '朝6時。アラームより先に、母の声で目が覚めた。\n「……お父さん？」\n父はもう10年前に亡くなっている。\n今日も、1日が始まる。',
+    '朝6時。アラームより先に、母の声で目が覚めた。\n「……お父さん？」\n父はもう10年前に亡くなっている。\n昨夜も2回起こされた。もう慣れたと思っていたのに、体は正直だった。\n今日も、1日が始まる。',
     // Day 2
     '朝。昨日の疲れが少し残っている。\n台所に行くと、母がぼんやりとテレビを見ていた。\nチャンネルは砂嵐だった。',
     // Day 3
@@ -950,6 +953,7 @@ const LANG = {
   sleepWarning: {
     severe: '⚠ 深刻な寝不足：昨夜はほとんど眠れなかった。体がふらつく。',
     moderate: '⚠ 寝不足：昨夜の睡眠は十分ではなかった。',
+    mild: '⚠ 軽い寝不足：睡眠は足りていない。疲れが蓄積している。',
   },
 
   // --- Action groups ---
@@ -1275,7 +1279,7 @@ const LANG = {
     },
     pamphletText: 'サービス付き高齢者向け住宅',
     workIncome: { full: 8000, half: 4000 },
-    fixedCost: 15000,
+    fixedCost: 18000,
     supplyCost: 300,
     envCosts: {
       nightLight: 500,
@@ -1295,16 +1299,16 @@ function initGameState() {
   G = {
     day: 1,
     maxDays: 7,
-    hp: 10,
+    hp: 8,
     maxHp: 10,
-    mp: 10,
+    mp: 7,
     maxMp: 10,
-    money: 50000,
+    money: 35000,
     weeklyFixedCost: LANG.locale.fixedCost,
     motherHealth: 3,
     motherMood: 'normal',
     motherCare: 2,
-    prevSleep: 8,
+    prevSleep: 5,
     medsSkippedYesterday: false,
 
     // Policy
@@ -1533,13 +1537,13 @@ function renderMorning() {
   // Status bar
   html += renderStatus();
 
-  // Sleep warning (from previous night, Day 2+)
-  if (day > 1) {
-    if (G.prevSleep <= 1) {
-      html += `<div class="sleep-warning">${LANG.sleepWarning.severe}</div>`;
-    } else if (G.prevSleep <= 3) {
-      html += `<div class="sleep-warning">${LANG.sleepWarning.moderate}</div>`;
-    }
+  // Sleep warning (from previous night / accumulated fatigue)
+  if (G.prevSleep <= 1) {
+    html += `<div class="sleep-warning">${LANG.sleepWarning.severe}</div>`;
+  } else if (G.prevSleep <= 3) {
+    html += `<div class="sleep-warning">${LANG.sleepWarning.moderate}</div>`;
+  } else if (G.prevSleep <= 5) {
+    html += `<div class="sleep-warning">${LANG.sleepWarning.mild}</div>`;
   }
 
   // Meal mastery morning message
@@ -2018,8 +2022,8 @@ function confirmDay() {
   G.money -= LANG.locale.supplyCost;
   dayResults.push({ tag: 'info', text: `日用品費: -${LANG.locale.currencyFormat(LANG.locale.supplyCost)}` });
 
-  // --- Fixed cost on Day 4 and Day 7 ---
-  if (G.day === 4 || G.day === 7) {
+  // --- Fixed cost on Day 3 and Day 6 ---
+  if (G.day === 3 || G.day === 6) {
     G.money -= G.weeklyFixedCost;
     dayResults.push({ tag: 'info', text: `固定費引き落とし: -${LANG.locale.currencyFormat(G.weeklyFixedCost)}` });
   }
@@ -2302,8 +2306,8 @@ function confirmDay() {
    Sudden Event Processing
    ================================================================ */
 function processSuddenEvent() {
-  // Calculate event probability (escalates with days)
-  let eventProb = 0.30;
+  // Calculate event probability (escalates with days, base 40% — already 3 weeks into caregiving)
+  let eventProb = 0.40;
   if (G.day >= 5) eventProb += 0.10;
   if (G.day >= 6) eventProb += 0.10;
   if (G._watchSkipped) eventProb += 0.20;
@@ -2700,12 +2704,12 @@ function goToNight() {
   let actualSleep = allocSleep;
   let nightResults = [];
 
-  // --- Night event probability (escalates with days) ---
-  let nightEventProb = 0.40;
+  // --- Night event probability (escalates with days, base 50% — already 3 weeks in) ---
+  let nightEventProb = 0.50;
   if (G.motherMood === 'uneasy') nightEventProb += 0.20;
   if (G.medsSkippedYesterday) nightEventProb += 0.15;
-  if (G.day >= 6) nightEventProb = Math.max(nightEventProb, 0.70);
-  else if (G.day >= 4) nightEventProb = Math.max(nightEventProb, 0.60);
+  if (G.day >= 6) nightEventProb = Math.max(nightEventProb, 0.75);
+  else if (G.day >= 4) nightEventProb = Math.max(nightEventProb, 0.65);
 
   if (Math.random() < nightEventProb) {
     // Pick a night event
