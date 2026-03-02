@@ -1168,6 +1168,10 @@ const LANG = {
       title: '最初の一歩',
       message: '一度だけ、外の力を借りました。\nその一歩は小さく見えるかもしれません。\nでも、その一歩がなければ、この7日間は乗り切れなかったかもしれません。',
     },
+    money: {
+      title: '払えない',
+      message: '口座の残高がマイナスになった。\n家賃、光熱費、おむつ代——\n母に必要なものすら買えなくなった。\n\n介護はお金がかかる。\nでも、介護のために仕事を辞めれば収入がなくなる。\n働けば介護ができない。休めばお金がなくなる。\n——出口のない迷路だった。',
+    },
   },
 
   // --- Ending extras ---
@@ -1185,6 +1189,10 @@ const LANG = {
     policyWorkClear: '仕事と介護。どちらも手放せなかった7日間。\n日本では、介護離職者が年間約10万人。\nあなたは踏みとどまった——でも、その代償は小さくなかった。',
     policyWorkOver: 'フルタイムで働きながらの介護。\n24時間では、どうやっても足りなかった。',
     serviceRejected: '頼ろうとして、断られた日があった。\n助けを求めることすら、いつもうまくいくとは限らない。\nそれでも——求め続けることに意味がある。',
+    moneyBroke: '貯金が底をついた。このままでは来週が回らない。お金の問題は、明日も明後日も続く。',
+    moneyDanger: '残り1万円を切った。来週の固定費を払えるだろうか。経済的な不安が、介護の疲れに重なる。',
+    moneyDeclining: '貯金が減り続けている。このペースでは長くは持たない。',
+    moneyIrony: 'お金だけは、ある。通帳の数字だけが増えていく。でも——お金では買えないものを、毎日失っている。',
   },
 
   // --- Report labels ---
@@ -2026,6 +2034,13 @@ function confirmDay() {
   if (G.day === 3 || G.day === 6) {
     G.money -= G.weeklyFixedCost;
     dayResults.push({ tag: 'info', text: `固定費引き落とし: -${LANG.locale.currencyFormat(G.weeklyFixedCost)}` });
+    // Balance warnings after fixed cost deduction
+    if (G.money <= 0) {
+      dayResults.push({ tag: 'bad', text: `残高がマイナスになった。どうすればいい。` });
+      G.emotionLog.push('お金のことを考えると眠れない');
+    } else if (G.money <= 5000) {
+      dayResults.push({ tag: 'bad', text: `固定費の引き落とし後、残高が${LANG.locale.currencyFormat(G.money)}に。来週の支払いが心配だ。` });
+    }
   }
 
   // --- Service processing (with rejection probability) ---
@@ -2576,6 +2591,10 @@ function checkGameOver() {
     G.gameOver = true;
     G.gameOverReason = 'mp';
   }
+  if (G.money <= -10000 && !G.gameOver) {
+    G.gameOver = true;
+    G.gameOverReason = 'money';
+  }
 }
 
 
@@ -2885,7 +2904,7 @@ function goToEnding() {
   // --- Determine ending type ---
   let ending;
   if (G.gameOver) {
-    ending = LANG.endings[G.gameOverReason]; // 'hp' or 'mp'
+    ending = LANG.endings[G.gameOverReason]; // 'hp', 'mp', or 'money'
   } else if (G.usedService >= 2) {
     ending = LANG.endings.connected;
   } else if (G.usedService === 1) {
@@ -2952,6 +2971,19 @@ function goToEnding() {
   // Peer support
   if (G.foundPeerSupport) {
     extras.push(LANG.endingExtras.peerSupport);
+  }
+
+  // Money-based extras (completion only)
+  if (!G.gameOver) {
+    if (G.policy === 'work' && G.money >= 40000) {
+      extras.push(LANG.endingExtras.moneyIrony);
+    } else if (G.money <= 0) {
+      extras.push(LANG.endingExtras.moneyBroke);
+    } else if (G.money <= 10000) {
+      extras.push(LANG.endingExtras.moneyDanger);
+    } else if (G.money <= 20000 && G.policy !== 'work') {
+      extras.push(LANG.endingExtras.moneyDeclining);
+    }
   }
 
   for (const ex of extras) {
